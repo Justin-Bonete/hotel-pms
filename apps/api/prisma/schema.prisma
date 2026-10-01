@@ -1,0 +1,366 @@
+// Hotel PMS: Phase 1 (Foundation) schema
+//
+// Conventions
+//  - Every tenant-owned table carries organization_id (indexed, first column of composite indexes).
+//  - Row-Level Security policies live in prisma/sql/rls.sql (Prisma cannot express them).
+//  - Soft delete (deleted_at) on organizations, groups, properties, users.
+//  - audit_logs is append-only (enforced by GRANTs in rls.sql).
+//  - DB columns are snake_case; Prisma fields are camelCase.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ---------------------------------------------------------------- enums
+
+enum OrganizationStatus {
+  ACTIVE
+  SUSPENDED
+
+  @@map("organization_status")
+}
+
+enum UserStatus {
+  INVITED
+  ACTIVE
+  DISABLED
+
+  @@map("user_status")
+}
+
+enum PropertyType {
+  HOTEL
+  RESORT
+  BOUTIQUE
+  INN
+  HOSTEL
+  SERVICED_APARTMENT
+  VACATION_RENTAL
+
+  @@map("property_type")
+}
+
+enum PropertyStatus {
+  ACTIVE
+  INACTIVE
+
+  @@map("property_status")
+}
+
+enum ScopeType {
+  ORGANIZATION
+  GROUP
+  PROPERTY
+
+  @@map("scope_type")
+}
+
+enum AuthTokenType {
+  EMAIL_VERIFICATION
+  PASSWORD_RESET
+
+  @@map("auth_token_type")
+}
+
+// ---------------------------------------------------------------- tenancy
+
+model Organization {
+  id        String             @id @default(uuid()) @db.Uuid
+  name      String
+  slug      String             @unique
+  status    OrganizationStatus @default(ACTIVE)
+  createdAt DateTime           @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt DateTime           @updatedAt @map("updated_at") @db.Timestamptz
+  deletedAt DateTime?          @map("deleted_at") @db.Timestamptz
+
+  propertyGroups PropertyGroup[]
+  properties     Property[]
+  departments    Department[]
+  buildings      Building[]
+  floors         Floor[]
+  users          User[]
+  sessions       UserSession[]
+  authTokens     AuthToken[]
+  roles          Role[]
+  roleAssignments UserRoleAssignment[]
+  auditLogs      AuditLog[]
+
+  @@map("organizations")
+}
+
+model PropertyGroup {
+  id             String    @id @default(uuid()) @db.Uuid
+  organizationId String    @map("organization_id") @db.Uuid
+  name           String
+  createdAt      DateTime  @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt      DateTime  @updatedAt @map("updated_at") @db.Timestamptz
+  deletedAt      DateTime? @map("deleted_at") @db.Timestamptz
+
+  organization Organization @relation(fields: [organizationId], references: [id])
+  properties   Property[]
+
+  @@unique([organizationId, name])
+  @@index([organizationId])
+  @@map("property_groups")
+}
+
+model Property {
+  id             String         @id @default(uuid()) @db.Uuid
+  organizationId String         @map("organization_id") @db.Uuid
+  groupId        String?        @map("group_id") @db.Uuid
+  name           String
+  slug           String
+  type           PropertyType   @default(HOTEL)
+  status         PropertyStatus @default(ACTIVE)
+  addressLine1   String?        @map("address_line1")
+  addressLine2   String?        @map("address_line2")
+  city           String?
+  region         String?
+  country        String         @default("PH") @db.Char(2)
+  postalCode     String?        @map("postal_code")
+  phone          String?
+  email          String?
+  timezone       String         @default("Asia/Manila")
+  currency       String         @default("PHP") @db.Char(3)
+  checkInTime    String         @default("14:00") @map("check_in_time") @db.VarChar(5)
+  checkOutTime   String         @default("12:00") @map("check_out_time") @db.VarChar(5)
+  createdAt      DateTime       @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt      DateTime       @updatedAt @map("updated_at") @db.Timestamptz
+  deletedAt      DateTime?      @map("deleted_at") @db.Timestamptz
+
+  organization Organization   @relation(fields: [organizationId], references: [id])
+  group        PropertyGroup? @relation(fields: [groupId], references: [id])
+  departments  Department[]
+  buildings    Building[]
+
+  @@unique([organizationId, slug])
+  @@index([organizationId, groupId])
+  @@index([organizationId, status])
+  @@map("properties")
+}
+
+model Department {
+  id             String   @id @default(uuid()) @db.Uuid
+  organizationId String   @map("organization_id") @db.Uuid
+  propertyId     String   @map("property_id") @db.Uuid
+  name           String
+  createdAt      DateTime @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt      DateTime @updatedAt @map("updated_at") @db.Timestamptz
+
+  organization Organization @relation(fields: [organizationId], references: [id])
+  property     Property     @relation(fields: [propertyId], references: [id])
+
+  @@unique([propertyId, name])
+  @@index([organizationId])
+  @@map("departments")
+}
+
+// Buildings/floors: tables exist now so Phase 2 (rooms) needs no restructuring.
+// No API or UI for them until Phase 2.
+model Building {
+  id             String   @id @default(uuid()) @db.Uuid
+  organizationId String   @map("organization_id") @db.Uuid
+  propertyId     String   @map("property_id") @db.Uuid
+  name           String
+  createdAt      DateTime @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt      DateTime @updatedAt @map("updated_at") @db.Timestamptz
+
+  organization Organization @relation(fields: [organizationId], references: [id])
+  property     Property     @relation(fields: [propertyId], references: [id])
+  floors       Floor[]
+
+  @@unique([propertyId, name])
+  @@index([organizationId])
+  @@map("buildings")
+}
+
+model Floor {
+  id             String   @id @default(uuid()) @db.Uuid
+  organizationId String   @map("organization_id") @db.Uuid
+  buildingId     String   @map("building_id") @db.Uuid
+  level          Int
+  name           String?
+  createdAt      DateTime @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt      DateTime @updatedAt @map("updated_at") @db.Timestamptz
+
+  organization Organization @relation(fields: [organizationId], references: [id])
+  building     Building     @relation(fields: [buildingId], references: [id])
+
+  @@unique([buildingId, level])
+  @@index([organizationId])
+  @@map("floors")
+}
+
+// ---------------------------------------------------------------- identity
+
+model User {
+  id               String     @id @default(uuid()) @db.Uuid
+  organizationId   String     @map("organization_id") @db.Uuid
+  // Email is globally unique so login needs no organization slug.
+  // Always store lower-cased (normalised in the service layer).
+  email            String     @unique
+  passwordHash     String     @map("password_hash")
+  firstName        String     @map("first_name")
+  lastName         String     @map("last_name")
+  phone            String?
+  status           UserStatus @default(INVITED)
+  emailVerifiedAt  DateTime?  @map("email_verified_at") @db.Timestamptz
+  // MFA columns exist for a later phase. Not used yet.
+  mfaSecret        String?    @map("mfa_secret")
+  mfaEnabled       Boolean    @default(false) @map("mfa_enabled")
+  failedLoginCount Int        @default(0) @map("failed_login_count")
+  lockedUntil      DateTime?  @map("locked_until") @db.Timestamptz
+  lastLoginAt      DateTime?  @map("last_login_at") @db.Timestamptz
+  createdAt        DateTime   @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt        DateTime   @updatedAt @map("updated_at") @db.Timestamptz
+  deletedAt        DateTime?  @map("deleted_at") @db.Timestamptz
+
+  organization    Organization         @relation(fields: [organizationId], references: [id])
+  sessions        UserSession[]
+  authTokens      AuthToken[]
+  roleAssignments UserRoleAssignment[]
+  auditLogs       AuditLog[]
+
+  @@index([organizationId, status])
+  @@map("users")
+}
+
+model UserSession {
+  id               String    @id @default(uuid()) @db.Uuid
+  organizationId   String    @map("organization_id") @db.Uuid
+  userId           String    @map("user_id") @db.Uuid
+  // All tokens descended from one login share a family; reuse of an old token revokes the family.
+  familyId         String    @map("family_id") @db.Uuid
+  refreshTokenHash String    @unique @map("refresh_token_hash")
+  deviceLabel      String?   @map("device_label")
+  ip               String?
+  userAgent        String?   @map("user_agent")
+  createdAt        DateTime  @default(now()) @map("created_at") @db.Timestamptz
+  lastUsedAt       DateTime  @default(now()) @map("last_used_at") @db.Timestamptz
+  expiresAt        DateTime  @map("expires_at") @db.Timestamptz
+  revokedAt        DateTime? @map("revoked_at") @db.Timestamptz
+
+  organization Organization @relation(fields: [organizationId], references: [id])
+  user         User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([organizationId])
+  @@index([userId, revokedAt])
+  @@index([familyId])
+  @@map("user_sessions")
+}
+
+model AuthToken {
+  id             String        @id @default(uuid()) @db.Uuid
+  organizationId String        @map("organization_id") @db.Uuid
+  userId         String        @map("user_id") @db.Uuid
+  type           AuthTokenType
+  tokenHash      String        @unique @map("token_hash")
+  expiresAt      DateTime      @map("expires_at") @db.Timestamptz
+  usedAt         DateTime?     @map("used_at") @db.Timestamptz
+  createdAt      DateTime      @default(now()) @map("created_at") @db.Timestamptz
+
+  organization Organization @relation(fields: [organizationId], references: [id])
+  user         User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([organizationId])
+  @@index([userId, type])
+  @@map("auth_tokens")
+}
+
+// ---------------------------------------------------------------- RBAC
+
+model Role {
+  id             String   @id @default(uuid()) @db.Uuid
+  // NULL = system role shared by every organization (read-only for tenants).
+  organizationId String?  @map("organization_id") @db.Uuid
+  key            String
+  name           String
+  description    String?
+  isSystem       Boolean  @default(false) @map("is_system")
+  createdAt      DateTime @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt      DateTime @updatedAt @map("updated_at") @db.Timestamptz
+
+  organization    Organization?        @relation(fields: [organizationId], references: [id])
+  permissions     RolePermission[]
+  assignments     UserRoleAssignment[]
+
+  // Postgres treats NULLs as distinct, so system-role key uniqueness
+  // is enforced by a partial unique index in prisma/sql/rls.sql.
+  @@unique([organizationId, key])
+  @@index([organizationId])
+  @@map("roles")
+}
+
+model Permission {
+  id          String  @id @default(uuid()) @db.Uuid
+  key         String  @unique // e.g. "property.update"
+  module      String
+  description String?
+
+  roles RolePermission[]
+
+  @@map("permissions")
+}
+
+model RolePermission {
+  roleId       String @map("role_id") @db.Uuid
+  permissionId String @map("permission_id") @db.Uuid
+
+  role       Role       @relation(fields: [roleId], references: [id], onDelete: Cascade)
+  permission Permission @relation(fields: [permissionId], references: [id], onDelete: Cascade)
+
+  @@id([roleId, permissionId])
+  @@map("role_permissions")
+}
+
+model UserRoleAssignment {
+  id             String    @id @default(uuid()) @db.Uuid
+  organizationId String    @map("organization_id") @db.Uuid
+  userId         String    @map("user_id") @db.Uuid
+  roleId         String    @map("role_id") @db.Uuid
+  scopeType      ScopeType @map("scope_type")
+  // ORGANIZATION scope -> the organization id, GROUP -> group id, PROPERTY -> property id.
+  // Never NULL, so the unique constraint below works as intended.
+  scopeId        String    @map("scope_id") @db.Uuid
+  createdAt      DateTime  @default(now()) @map("created_at") @db.Timestamptz
+
+  organization Organization @relation(fields: [organizationId], references: [id])
+  user         User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  role         Role         @relation(fields: [roleId], references: [id])
+
+  @@unique([userId, roleId, scopeType, scopeId])
+  @@index([organizationId])
+  @@index([userId])
+  @@index([scopeType, scopeId])
+  @@map("user_role_assignments")
+}
+
+// ---------------------------------------------------------------- audit
+
+model AuditLog {
+  id             String   @id @default(uuid()) @db.Uuid
+  organizationId String   @map("organization_id") @db.Uuid
+  propertyId     String?  @map("property_id") @db.Uuid
+  actorId        String?  @map("actor_id") @db.Uuid
+  action         String // e.g. "property.update", "user.role_assigned"
+  entity         String
+  entityId       String?  @map("entity_id")
+  before         Json?
+  after          Json?
+  ip             String?
+  userAgent      String?  @map("user_agent")
+  createdAt      DateTime @default(now()) @map("created_at") @db.Timestamptz
+
+  organization Organization @relation(fields: [organizationId], references: [id])
+  actor        User?        @relation(fields: [actorId], references: [id])
+
+  @@index([organizationId, createdAt(sort: Desc)])
+  @@index([organizationId, entity, entityId])
+  @@index([organizationId, propertyId, createdAt(sort: Desc)])
+  @@map("audit_logs")
+}

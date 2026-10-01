@@ -1,0 +1,28 @@
+{
+  "name": "hotel-pms",
+  "private": true,
+  "packageManager": "pnpm@9.12.0",
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "dev": "turbo run dev",
+    "build": "turbo run build",
+    "lint": "turbo run lint",
+    "test": "turbo run test",
+    "typecheck": "turbo run typecheck",
+    "db:up": "docker compose up -d",
+    "db:down": "docker compose down",
+    "db:migrate": "pnpm --filter @pms/api db:migrate",
+    "db:rls": "pnpm --filter @pms/api db:rls",
+    "db:seed": "pnpm --filter @pms/api db:seed",
+    "db:reset": "pnpm --filter @pms/api db:reset",
+    "build:packages": "pnpm --filter @pms/types build && pnpm --filter @pms/validation build",
+    "dev:api": "pnpm build:packages && pnpm --filter @pms/api dev",
+    "dev:web": "pnpm build:packages && pnpm --filter @pms/web dev"
+  },
+  "devDependencies": {
+    "turbo": "^2.3.0",
+    "typescript": "^5.6.3"
+  }
+}
