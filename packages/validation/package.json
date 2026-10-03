@@ -4,7 +4,15 @@
   "private": true,
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
-  "scripts": { "build": "tsc -p tsconfig.json", "typecheck": "tsc -p tsconfig.json --noEmit" },
-  "dependencies": { "zod": "^3.23.8" },
-  "devDependencies": { "@pms/config": "workspace:*" }
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit"
+  },
+  "dependencies": {
+    "zod": "^3.23.8",
+    "@pms/types": "workspace:*"
+  },
+  "devDependencies": {
+    "@pms/config": "workspace:*"
+  }
 }

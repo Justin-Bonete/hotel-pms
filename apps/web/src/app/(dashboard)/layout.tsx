@@ -8,6 +8,7 @@ import { Sidebar } from '@/components/layout/sidebar';
 import { Topbar } from '@/components/layout/topbar';
 import { Spinner } from '@/components/ui/ui';
 import { useAuth } from '@/features/auth/auth-context';
+import { AccessProvider } from '@/features/access/access-context';
 import { PropertyProvider } from '@/features/properties/property-context';
 
 export default function DashboardLayout({ children }: { children: ReactNode }) {
@@ -29,6 +30,7 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
 
   return (
     <PropertyProvider>
+      <AccessProvider>
       <div className="flex min-h-screen">
         <aside className="fixed inset-y-0 hidden w-64 lg:block">
           <Sidebar />
@@ -52,6 +54,7 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
         </div>
       </div>
       <MobileNav onMore={() => setDrawer(true)} />
+      </AccessProvider>
     </PropertyProvider>
   );
 }

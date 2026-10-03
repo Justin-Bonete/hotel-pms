@@ -20,12 +20,14 @@ import { ENV } from '../../config/config.module';
 import type { Env } from '../../config/env';
 import { AuthService, AuthResult } from './auth.service';
 import { AuthContext, CurrentUser } from './decorators/current-user.decorator';
+import { Authenticated } from '../rbac/decorators/access.decorators';
 import { Public } from './decorators/public.decorator';
 import { RateLimit } from './decorators/rate-limit.decorator';
 
 const REFRESH_COOKIE = 'pms_rt';
 const COOKIE_PATH = '/api/v1/auth';
 
+@Authenticated() // @Public() routes below override this
 @Controller('auth')
 export class AuthController {
   constructor(

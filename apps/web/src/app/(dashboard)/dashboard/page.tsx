@@ -62,6 +62,7 @@ export default function DashboardPage() {
               <div className="mt-4 flex items-center gap-2 text-xs text-slate-500">
                 <span className="rounded bg-slate-100 px-2 py-0.5">{p.type.replace('_', ' ').toLowerCase()}</span>
                 {p.groupName && <span className="rounded bg-slate-100 px-2 py-0.5">{p.groupName}</span>}
+                <span className="rounded bg-slate-100 px-2 py-0.5">{p.roomCount} {p.roomCount === 1 ? 'room' : 'rooms'}</span>
               </div>
             </Card>
           ))}

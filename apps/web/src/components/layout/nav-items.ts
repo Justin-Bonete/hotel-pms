@@ -19,7 +19,7 @@ export const NAV_ITEMS: NavItem[] = [
   { label: 'Reservations', href: '/reservations', icon: CalendarCheck, ready: false, phase: 'Phase 3' },
   { label: 'Front Desk', href: '/front-desk', icon: ConciergeBell, ready: false, phase: 'Phase 4' },
   { label: 'Calendar', href: '/calendar', icon: CalendarDays, ready: false, phase: 'Phase 3' },
-  { label: 'Rooms', href: '/rooms', icon: BedDouble, ready: false, phase: 'Phase 2' },
+  { label: 'Rooms', href: '/rooms', icon: BedDouble, ready: true },
   { label: 'Housekeeping', href: '/housekeeping', icon: Sparkles, ready: false, phase: 'Phase 4' },
   { label: 'Maintenance', href: '/maintenance', icon: Wrench, ready: false, phase: 'Phase 4' },
   { label: 'Guests', href: '/guests', icon: Users, ready: false, phase: 'Phase 3' },

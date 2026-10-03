@@ -23,7 +23,8 @@ DECLARE t text;
 BEGIN
   FOREACH t IN ARRAY ARRAY[
     'property_groups','properties','departments','buildings','floors',
-    'users','user_sessions','auth_tokens','user_role_assignments','audit_logs'
+    'users','user_sessions','auth_tokens','user_role_assignments','audit_logs',
+    'room_types','rooms'
   ] LOOP
     EXECUTE format('ALTER TABLE %I ENABLE ROW LEVEL SECURITY', t);
     EXECUTE format('DROP POLICY IF EXISTS tenant_isolation ON %I', t);
@@ -51,10 +52,15 @@ CREATE POLICY tenant_isolation ON roles
 -- System role keys must be unique (a plain UNIQUE treats NULLs as distinct).
 CREATE UNIQUE INDEX IF NOT EXISTS roles_system_key_unique ON roles (key) WHERE organization_id IS NULL;
 
+-- Uniqueness among non-archived rows (a plain UNIQUE would block reusing an archived room number).
+CREATE UNIQUE INDEX IF NOT EXISTS rooms_property_number_unique ON rooms (property_id, number) WHERE deleted_at IS NULL;
+CREATE UNIQUE INDEX IF NOT EXISTS room_types_property_name_unique ON room_types (property_id, lower(name)) WHERE deleted_at IS NULL;
+
 -- ------------------------------------------------------------ grants (least privilege)
 GRANT SELECT, INSERT, UPDATE, DELETE ON
   organizations, property_groups, properties, departments, buildings, floors,
-  users, user_sessions, auth_tokens, roles, role_permissions, user_role_assignments
+  users, user_sessions, auth_tokens, roles, role_permissions, user_role_assignments,
+  room_types, rooms
 TO pms_app;
 
 -- Permissions are code-defined and seeded by the owner role only.

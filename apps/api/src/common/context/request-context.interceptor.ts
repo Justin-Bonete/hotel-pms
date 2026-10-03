@@ -22,6 +22,8 @@ export class RequestContextInterceptor implements NestInterceptor {
       userId: req.auth?.userId,
       organizationId: req.auth?.organizationId,
       familyId: req.auth?.familyId,
+      access: req.access,
+      propertyId: req.access?.activePropertyId ?? undefined,
     };
 
     // The handler runs on subscribe, so subscribe INSIDE the context.

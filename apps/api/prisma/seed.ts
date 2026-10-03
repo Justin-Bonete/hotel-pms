@@ -3,72 +3,22 @@
  * Runs with DATABASE_URL (owner role), so it is not subject to RLS.
  *
  * Seeds:
- *  1. Phase 1 permissions (code-defined source of truth)
+ *  1. Permissions (from the shared catalog in packages/types)
  *  2. System roles + their permissions
  *  3. Demo organization "ABC Hospitality" with 3 properties and departments
  *  4. One Owner user (credentials from env, dev only)
  *
  * Only real Phase 1 data is created. No reservations, revenue, etc.
  */
-import { PrismaClient, PropertyType, ScopeType, UserStatus } from '@prisma/client';
+import { PrismaClient, PropertyType, RoomStatus, ScopeType, UserStatus } from '@prisma/client';
+import { PERMISSION_CATALOG, SYSTEM_ROLE_TEMPLATES } from '@pms/types';
 import * as argon2 from 'argon2';
 
 const prisma = new PrismaClient();
 
-const PERMISSIONS: Array<{ key: string; module: string; description: string }> = [
-  { key: 'organization.read', module: 'organization', description: 'View organization profile' },
-  { key: 'organization.update', module: 'organization', description: 'Edit organization profile' },
-  { key: 'property_group.read', module: 'property', description: 'View property groups' },
-  { key: 'property_group.manage', module: 'property', description: 'Create, edit, delete property groups' },
-  { key: 'property.read', module: 'property', description: 'View properties' },
-  { key: 'property.create', module: 'property', description: 'Create properties' },
-  { key: 'property.update', module: 'property', description: 'Edit properties' },
-  { key: 'property.delete', module: 'property', description: 'Archive properties' },
-  { key: 'staff.read', module: 'staff', description: 'View staff accounts' },
-  { key: 'staff.manage', module: 'staff', description: 'Create, edit, disable staff accounts' },
-  { key: 'role.read', module: 'rbac', description: 'View roles and permissions' },
-  { key: 'role.manage', module: 'rbac', description: 'Create and edit custom roles' },
-  { key: 'role.assign', module: 'rbac', description: 'Assign roles to staff (within own scope)' },
-  { key: 'audit.read', module: 'audit', description: 'View audit logs' },
-];
-
-const ALL = PERMISSIONS.map((p) => p.key);
-
-// Phase 1 only has org/property/staff/RBAC/audit permissions. Operational roles
-// (front desk, housekeeping, cashier...) receive their real permissions in the phase
-// that introduces those modules; for now they can only see properties.
-const SYSTEM_ROLES: Array<{ key: string; name: string; description: string; permissions: string[] }> = [
-  { key: 'OWNER', name: 'Owner', description: 'Full access to the organization', permissions: ALL },
-  { key: 'SUPER_ADMIN', name: 'Super Admin', description: 'Full administrative access', permissions: ALL },
-  {
-    key: 'GENERAL_MANAGER',
-    name: 'General Manager',
-    description: 'Manages properties and staff',
-    permissions: ['organization.read', 'property_group.read', 'property.read', 'property.update',
-      'staff.read', 'staff.manage', 'role.read', 'role.assign', 'audit.read'],
-  },
-  {
-    key: 'PROPERTY_MANAGER',
-    name: 'Property Manager',
-    description: 'Manages assigned properties',
-    permissions: ['property.read', 'property.update', 'staff.read', 'role.read'],
-  },
-  ...[
-    ['FRONT_DESK', 'Front Desk'],
-    ['RECEPTIONIST', 'Receptionist'],
-    ['HOUSEKEEPING_SUPERVISOR', 'Housekeeping Supervisor'],
-    ['HOUSEKEEPER', 'Housekeeper'],
-    ['MAINTENANCE', 'Maintenance'],
-    ['CASHIER', 'Cashier'],
-    ['ACCOUNTANT', 'Accountant'],
-    ['INVENTORY_MANAGER', 'Inventory Manager'],
-  ].map(([key, name]) => ({
-    key: key as string,
-    name: name as string,
-    description: `${name} (operational permissions arrive with their modules)`,
-    permissions: ['property.read'],
-  })),
-];
+// Permissions and system roles come from the shared catalog (@pms/types), the same one the API enforces.
+const PERMISSIONS = PERMISSION_CATALOG.map(({ key, module, description }) => ({ key, module, description }));
+const SYSTEM_ROLES = SYSTEM_ROLE_TEMPLATES;
 
 const DEMO_PROPERTIES: Array<{
   name: string; slug: string; type: PropertyType; group: string; city: string; region: string;
@@ -79,6 +29,103 @@ const DEMO_PROPERTIES: Array<{
 ];
 
 const DEPARTMENTS = ['Front Desk', 'Housekeeping', 'Maintenance', 'Food & Beverage', 'Accounting'];
+
+
+// ---------------------------------------------------------------- demo rooms (demo organization only)
+const STATUS_CYCLE: Array<{ status: RoomStatus; note?: string }> = [
+  { status: 'AVAILABLE' }, { status: 'AVAILABLE' }, { status: 'AVAILABLE' }, { status: 'DIRTY' },
+  { status: 'CLEANING' }, { status: 'INSPECTED' }, { status: 'AVAILABLE' },
+  { status: 'MAINTENANCE', note: 'Aircon not cooling' }, { status: 'AVAILABLE' }, { status: 'AVAILABLE' },
+  { status: 'OUT_OF_ORDER', note: 'Water damage in bathroom' }, { status: 'DIRTY' },
+];
+
+interface RoomPlan {
+  building: string;
+  floors: Array<{ level: number; name?: string }>;
+  types: Array<{ name: string; maxOccupancy: number; bed: string; amenities: string[] }>;
+  rooms: Array<{ number: string; type: string; floor: number }>;
+}
+
+const nums = (count: number) => Array.from({ length: count }, (_, i) => i + 1);
+
+const ROOM_PLANS: Record<string, RoomPlan> = {
+  'manila-grand': {
+    building: 'Main Tower',
+    floors: nums(4).map((level) => ({ level })),
+    types: [
+      { name: 'Standard', maxOccupancy: 2, bed: '1 Queen bed', amenities: ['Wi-Fi', 'Air conditioning', 'TV'] },
+      { name: 'Deluxe', maxOccupancy: 3, bed: '1 King bed', amenities: ['Wi-Fi', 'Air conditioning', 'TV', 'Mini bar'] },
+      { name: 'Suite', maxOccupancy: 4, bed: '1 King bed + sofa bed', amenities: ['Wi-Fi', 'Air conditioning', 'TV', 'Mini bar', 'Bathtub'] },
+    ],
+    rooms: nums(4).flatMap((f) => nums(5).map((n) => ({ number: `${f}0${n}`, floor: f, type: n === 5 ? 'Suite' : n === 4 ? 'Deluxe' : 'Standard' }))),
+  },
+  'baguio-lodge': {
+    building: 'Lodge',
+    floors: nums(2).map((level) => ({ level })),
+    types: [
+      { name: 'Standard', maxOccupancy: 2, bed: '1 Double bed', amenities: ['Wi-Fi', 'Heater'] },
+      { name: 'Family Room', maxOccupancy: 5, bed: '2 Double beds', amenities: ['Wi-Fi', 'Heater', 'Fireplace'] },
+    ],
+    rooms: nums(2).flatMap((f) => nums(5).map((n) => ({ number: `${f}0${n}`, floor: f, type: n === 5 ? 'Family Room' : 'Standard' }))),
+  },
+  'la-union-resort': {
+    building: 'Beachfront',
+    floors: [{ level: 1, name: 'Villas' }],
+    types: [
+      { name: 'Villa', maxOccupancy: 4, bed: '1 King bed + 2 single beds', amenities: ['Wi-Fi', 'Air conditioning', 'Private pool'] },
+      { name: 'Garden Suite', maxOccupancy: 2, bed: '1 King bed', amenities: ['Wi-Fi', 'Air conditioning', 'Garden view'] },
+    ],
+    rooms: nums(8).map((n) => ({ number: `V0${n}`, floor: 1, type: n > 6 ? 'Garden Suite' : 'Villa' })),
+  },
+};
+
+/** Seeds buildings, floors, room types and rooms ONLY for a property that has no rooms yet. */
+async function seedRooms(organizationId: string, propertyId: string, slug: string) {
+  const plan = ROOM_PLANS[slug];
+  if (!plan) return;
+  if ((await prisma.room.count({ where: { propertyId } })) > 0) return;
+
+  const building = await prisma.building.upsert({
+    where: { propertyId_name: { propertyId, name: plan.building } },
+    update: {},
+    create: { organizationId, propertyId, name: plan.building },
+  });
+  const floorIds = new Map<number, string>();
+  for (const f of plan.floors) {
+    const floor = await prisma.floor.upsert({
+      where: { buildingId_level: { buildingId: building.id, level: f.level } },
+      update: {},
+      create: { organizationId, buildingId: building.id, level: f.level, name: f.name ?? null },
+    });
+    floorIds.set(f.level, floor.id);
+  }
+  const typeIds = new Map<string, string>();
+  for (const t of plan.types) {
+    const existing = await prisma.roomType.findFirst({ where: { propertyId, name: t.name, deletedAt: null } });
+    const type =
+      existing ??
+      (await prisma.roomType.create({
+        data: { organizationId, propertyId, name: t.name, maxOccupancy: t.maxOccupancy, bedConfiguration: t.bed, amenities: t.amenities },
+      }));
+    typeIds.set(t.name, type.id);
+  }
+  let i = 0;
+  for (const r of plan.rooms) {
+    const s = STATUS_CYCLE[i % STATUS_CYCLE.length]!;
+    i++;
+    await prisma.room.create({
+      data: {
+        organizationId,
+        propertyId,
+        roomTypeId: typeIds.get(r.type)!,
+        floorId: floorIds.get(r.floor) ?? null,
+        number: r.number,
+        status: s.status,
+        statusNote: s.note ?? null,
+      },
+    });
+  }
+}
 
 async function seedPermissionsAndRoles() {
   for (const p of PERMISSIONS) {
@@ -133,6 +180,7 @@ async function seedDemoOrganization() {
         region: p.region,
       },
     });
+    await seedRooms(org.id, property.id, p.slug);
     for (const name of DEPARTMENTS) {
       await prisma.department.upsert({
         where: { propertyId_name: { propertyId: property.id, name } },

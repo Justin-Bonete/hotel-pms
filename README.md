@@ -65,3 +65,30 @@ pnpm dev:web      # terminal 2  -> http://localhost:3000
 
 Open **http://localhost:3000** (use `localhost`, not `127.0.0.1`, so the sign-in cookie is sent).
 Demo login after `pnpm db:seed`: `owner@abc-hospitality.test` / the `SEED_OWNER_PASSWORD` from your `.env`.
+
+## Permissions (step 5)
+
+- Catalog and system roles: `packages/types/src/permissions.ts` (one source for API, seed and web).
+- **Deny by default:** every route must be `@Public()`, `@Authenticated()` or `@RequirePermission('x.y')`.
+- Role scope: ORGANIZATION (everywhere), GROUP (a group's properties) or PROPERTY. Organization-level permissions
+  (create property, manage roles...) only count at ORGANIZATION scope.
+- Property switcher: send `X-Property-Id: <uuid>` (or `ALL`). The API verifies you may see that property.
+- Endpoints: `GET /rbac/me`, `GET /rbac/roles`, `GET /rbac/permissions`.
+- Tests: `pnpm test` (unit, no database) and `pnpm test:int` (tenant isolation against Docker Postgres).
+
+## Rooms (Phase 2) and property management (step 6)
+
+Apply after pulling these changes (in this order):
+
+```bash
+pnpm install
+pnpm build:packages
+pnpm db:migrate     # name it: phase2_rooms
+pnpm db:rls         # adds row-level security + unique indexes for the new tables
+pnpm db:seed        # refreshes role permissions and adds demo rooms (only to properties with none)
+```
+
+Then `pnpm test`, `pnpm test:int`, `pnpm dev:api`, `pnpm dev:web`.
+
+New API routes (all permission-checked and audit-logged): `/properties` (create, edit, archive), `/property-groups`,
+`/properties/:id/structure|buildings|room-types|rooms`, `/room-types/:id`, `/rooms/:id`, `/rooms/:id/status`.

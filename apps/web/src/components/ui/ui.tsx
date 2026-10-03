@@ -1,5 +1,12 @@
 import { AlertCircle, CheckCircle2, Info, Loader2, TriangleAlert } from 'lucide-react';
-import { forwardRef, type ButtonHTMLAttributes, type InputHTMLAttributes, type ReactNode } from 'react';
+import {
+  forwardRef,
+  type ButtonHTMLAttributes,
+  type InputHTMLAttributes,
+  type ReactNode,
+  type SelectHTMLAttributes,
+  type TextareaHTMLAttributes,
+} from 'react';
 import { cn } from '@/lib/utils';
 
 // ---------------------------------------------------------------- Button
@@ -126,3 +133,46 @@ export function EmptyState({ title, description, action }: { title: string; desc
     </div>
   );
 }
+
+// ---------------------------------------------------------------- Select / Textarea
+
+const controlClass = (error?: string) =>
+  cn(
+    'block w-full rounded-lg border-0 px-3 py-2 text-sm text-slate-900 ring-1 ring-inset placeholder:text-slate-400',
+    'focus:ring-2 focus:ring-inset focus:ring-indigo-600',
+    error ? 'ring-red-400' : 'ring-slate-300',
+  );
+
+interface SelectFieldProps extends SelectHTMLAttributes<HTMLSelectElement> {
+  label: string;
+  error?: string;
+}
+
+export const SelectField = forwardRef<HTMLSelectElement, SelectFieldProps>(function SelectField({ label, error, id, children, ...rest }, ref) {
+  const selectId = id ?? rest.name;
+  return (
+    <div className="space-y-1.5">
+      <label htmlFor={selectId} className="block text-sm font-medium text-slate-700">{label}</label>
+      <select ref={ref} id={selectId} aria-invalid={error ? true : undefined} className={controlClass(error)} {...rest}>
+        {children}
+      </select>
+      {error && <p className="text-xs text-red-600">{error}</p>}
+    </div>
+  );
+});
+
+interface TextareaFieldProps extends TextareaHTMLAttributes<HTMLTextAreaElement> {
+  label: string;
+  error?: string;
+}
+
+export const TextareaField = forwardRef<HTMLTextAreaElement, TextareaFieldProps>(function TextareaField({ label, error, id, ...rest }, ref) {
+  const areaId = id ?? rest.name;
+  return (
+    <div className="space-y-1.5">
+      <label htmlFor={areaId} className="block text-sm font-medium text-slate-700">{label}</label>
+      <textarea ref={ref} id={areaId} rows={3} aria-invalid={error ? true : undefined} className={controlClass(error)} {...rest} />
+      {error && <p className="text-xs text-red-600">{error}</p>}
+    </div>
+  );
+});

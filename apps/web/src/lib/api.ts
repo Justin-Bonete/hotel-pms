@@ -34,7 +34,7 @@ interface RequestOptions {
   auth?: boolean;
 }
 
-async function send<T>(path: string, opts: RequestOptions, isRetry = false): Promise<Envelope<T>> {
+async function send<T>(path: string, opts: RequestOptions = {}, isRetry = false): Promise<Envelope<T>> {
   const headers: Record<string, string> = {};
   if (opts.body !== undefined) headers['Content-Type'] = 'application/json';
   const token = tokenStore.get();
@@ -77,7 +77,7 @@ export function refreshSession(): Promise<AuthPayload | null> {
         return null;
       })
       .finally(() => {
-        // Keep the result briefly so React StrictMode's double effect reuses it.
+        
         setTimeout(() => {
           inflight = null;
         }, 2000);
@@ -94,6 +94,7 @@ export const api = {
   get: async <T>(path: string): Promise<T> => (await send<T>(path)).data,
   post: async <T>(path: string, body?: unknown, auth = true): Promise<T> =>
     (await send<T>(path, { method: 'POST', body: body ?? undefined, auth })).data,
+  patch: async <T>(path: string, body: unknown): Promise<T> => (await send<T>(path, { method: 'PATCH', body })).data,
   delete: async <T>(path: string): Promise<T> => (await send<T>(path, { method: 'DELETE' })).data,
   page: <T>(path: string): Promise<Envelope<T[]>> => send<T[]>(path),
 };

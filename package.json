@@ -15,11 +15,12 @@
     "db:down": "docker compose down",
     "db:migrate": "pnpm --filter @pms/api db:migrate",
     "db:rls": "pnpm --filter @pms/api db:rls",
-    "db:seed": "pnpm --filter @pms/api db:seed",
-    "db:reset": "pnpm --filter @pms/api db:reset",
+    "db:seed": "pnpm build:packages && pnpm --filter @pms/api db:seed",
+    "db:reset": "pnpm build:packages && pnpm --filter @pms/api db:reset",
     "build:packages": "pnpm --filter @pms/types build && pnpm --filter @pms/validation build",
     "dev:api": "pnpm build:packages && pnpm --filter @pms/api dev",
-    "dev:web": "pnpm build:packages && pnpm --filter @pms/web dev"
+    "dev:web": "pnpm build:packages && pnpm --filter @pms/web dev",
+    "test:int": "pnpm build:packages && pnpm --filter @pms/api test:int"
   },
   "devDependencies": {
     "turbo": "^2.3.0",

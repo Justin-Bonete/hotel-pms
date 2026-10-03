@@ -4,6 +4,8 @@ import { JwtModule } from '@nestjs/jwt';
 import { ENV } from '../../config/config.module';
 import type { Env } from '../../config/env';
 import { parseDurationSeconds } from '../../config/env';
+import { RbacModule } from '../rbac/rbac.module';
+import { PermissionsGuard } from '../rbac/guards/permissions.guard';
 import { AuthController } from './auth.controller';
 import { AuthRepository } from './auth.repository';
 import { AuthService } from './auth.service';
@@ -14,6 +16,7 @@ import { JWT_ISSUER, TokenService } from './token.service';
 
 @Module({
   imports: [
+    RbacModule,
     JwtModule.registerAsync({
       inject: [ENV],
       useFactory: (env: Env) => ({
@@ -32,9 +35,10 @@ import { JWT_ISSUER, TokenService } from './token.service';
     AuthRepository,
     PasswordService,
     TokenService,
-    // Order matters: rate-limit first, then authentication. Both apply to every route.
+    // Order matters: rate-limit, then authentication, then permissions. All apply to every route.
     { provide: APP_GUARD, useClass: RateLimitGuard },
     { provide: APP_GUARD, useClass: JwtAuthGuard },
+    { provide: APP_GUARD, useClass: PermissionsGuard },
   ],
   exports: [TokenService],
 })

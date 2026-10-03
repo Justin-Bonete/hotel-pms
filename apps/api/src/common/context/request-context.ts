@@ -1,6 +1,7 @@
 import { AsyncLocalStorage } from 'node:async_hooks';
 import { randomUUID } from 'node:crypto';
 import type { NextFunction, Request, Response } from 'express';
+import type { AccessContext } from '../access/access-context';
 
 /** Filled by JwtAuthGuard on the request object; copied into the context by the interceptor. */
 export interface AuthContext {
@@ -10,7 +11,7 @@ export interface AuthContext {
   familyId: string;
 }
 
-export type AuthenticatedRequest = Request & { auth?: AuthContext };
+export type AuthenticatedRequest = Request & { auth?: AuthContext; access?: AccessContext };
 
 /** Per-request state available anywhere on the server without passing it around. */
 export interface RequestContext {
@@ -19,6 +20,8 @@ export interface RequestContext {
   propertyId?: string | 'ALL';
   userId?: string;
   familyId?: string;
+  /** What the user may do. Set by PermissionsGuard on routes that declare a permission. */
+  access?: AccessContext;
   ip?: string;
   userAgent?: string;
 }

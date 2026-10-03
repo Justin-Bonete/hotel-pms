@@ -67,6 +67,19 @@ enum AuthTokenType {
   @@map("auth_token_type")
 }
 
+// Stored statuses only. OCCUPIED / RESERVED / DUE_OUT are derived from reservations (Phase 3).
+enum RoomStatus {
+  AVAILABLE
+  DIRTY
+  CLEANING
+  INSPECTED
+  OUT_OF_ORDER
+  OUT_OF_SERVICE
+  MAINTENANCE
+
+  @@map("room_status")
+}
+
 // ---------------------------------------------------------------- tenancy
 
 model Organization {
@@ -89,6 +102,8 @@ model Organization {
   roles          Role[]
   roleAssignments UserRoleAssignment[]
   auditLogs      AuditLog[]
+  roomTypes      RoomType[]
+  rooms          Room[]
 
   @@map("organizations")
 }
@@ -137,6 +152,8 @@ model Property {
   group        PropertyGroup? @relation(fields: [groupId], references: [id])
   departments  Department[]
   buildings    Building[]
+  roomTypes    RoomType[]
+  rooms        Room[]
 
   @@unique([organizationId, slug])
   @@index([organizationId, groupId])
@@ -190,6 +207,7 @@ model Floor {
 
   organization Organization @relation(fields: [organizationId], references: [id])
   building     Building     @relation(fields: [buildingId], references: [id])
+  rooms        Room[]
 
   @@unique([buildingId, level])
   @@index([organizationId])
@@ -363,4 +381,56 @@ model AuditLog {
   @@index([organizationId, entity, entityId])
   @@index([organizationId, propertyId, createdAt(sort: Desc)])
   @@map("audit_logs")
+}
+
+// ---------------------------------------------------------------- rooms (Phase 2)
+
+model RoomType {
+  id               String    @id @default(uuid()) @db.Uuid
+  organizationId   String    @map("organization_id") @db.Uuid
+  propertyId       String    @map("property_id") @db.Uuid
+  name             String
+  description      String?
+  maxOccupancy     Int       @default(2) @map("max_occupancy")
+  bedConfiguration String?   @map("bed_configuration")
+  amenities        String[]  @default([])
+  createdAt        DateTime  @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt        DateTime  @updatedAt @map("updated_at") @db.Timestamptz
+  deletedAt        DateTime? @map("deleted_at") @db.Timestamptz
+
+  organization Organization @relation(fields: [organizationId], references: [id])
+  property     Property     @relation(fields: [propertyId], references: [id])
+  rooms        Room[]
+
+  // Name uniqueness among non-archived types is a partial unique index in prisma/sql/rls.sql.
+  @@index([organizationId])
+  @@index([propertyId])
+  @@map("room_types")
+}
+
+model Room {
+  id              String     @id @default(uuid()) @db.Uuid
+  organizationId  String     @map("organization_id") @db.Uuid
+  propertyId      String     @map("property_id") @db.Uuid
+  roomTypeId      String     @map("room_type_id") @db.Uuid
+  floorId         String?    @map("floor_id") @db.Uuid
+  number          String
+  status          RoomStatus @default(AVAILABLE)
+  statusNote      String?    @map("status_note")
+  statusChangedAt DateTime   @default(now()) @map("status_changed_at") @db.Timestamptz
+  notes           String?
+  createdAt       DateTime   @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt       DateTime   @updatedAt @map("updated_at") @db.Timestamptz
+  deletedAt       DateTime?  @map("deleted_at") @db.Timestamptz
+
+  organization Organization @relation(fields: [organizationId], references: [id])
+  property     Property     @relation(fields: [propertyId], references: [id])
+  roomType     RoomType     @relation(fields: [roomTypeId], references: [id])
+  floor        Floor?       @relation(fields: [floorId], references: [id])
+
+  // Room number uniqueness among non-archived rooms is a partial unique index in prisma/sql/rls.sql.
+  @@index([organizationId, propertyId, status])
+  @@index([propertyId, roomTypeId])
+  @@index([floorId])
+  @@map("rooms")
 }
