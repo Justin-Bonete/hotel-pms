@@ -68,4 +68,6 @@ export interface RoomView {
   floorId: string | null;
   floorLevel: number | null;
   floorLabel: string | null;
+  /** From today's reservations: in-house, arriving today, or leaving today. null = none. */
+  derived: 'OCCUPIED' | 'RESERVED' | 'DUE_OUT' | null;
 }

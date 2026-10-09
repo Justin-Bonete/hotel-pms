@@ -17,6 +17,15 @@ let propA = '';
 let propB = '';
 let roomA = '';
 let roomB = '';
+let typeA = '';
+let guestA = '';
+let guestB = '';
+let resB = '';
+
+const stay = (organizationId: string, propertyId: string, guestId: string, roomTypeId: string, roomId: string | null, code: string, arrival: string, departure: string, status: 'CONFIRMED' | 'CHECKED_IN' | 'CANCELLED' | 'CHECKED_OUT' = 'CONFIRMED') => ({
+  organizationId, propertyId, guestId, roomTypeId, roomId, code, status, nights: 2, totalMinor: 100000, currency: 'PHP',
+  arrivalDate: new Date(`${arrival}T00:00:00.000Z`), departureDate: new Date(`${departure}T00:00:00.000Z`),
+});
 
 const asTenant = <T>(orgId: string, fn: (tx: Prisma.TransactionClient) => Promise<T>) =>
   app.$transaction(async (tx) => {
@@ -32,14 +41,20 @@ beforeAll(async () => {
   propA = (await owner.property.create({ data: { organizationId: orgA, name: 'A Hotel', slug: 'a-hotel' } })).id;
   propB = (await owner.property.create({ data: { organizationId: orgB, name: 'B Hotel', slug: 'b-hotel' } })).id;
   await owner.auditLog.create({ data: { organizationId: orgA, action: 'test.seed', entity: 'test' } });
-  const typeA = await owner.roomType.create({ data: { organizationId: orgA, propertyId: propA, name: 'Std' } });
+  const typeAFull = await owner.roomType.create({ data: { organizationId: orgA, propertyId: propA, name: 'Std' } });
   const typeB = await owner.roomType.create({ data: { organizationId: orgB, propertyId: propB, name: 'Std' } });
-  roomA = (await owner.room.create({ data: { organizationId: orgA, propertyId: propA, roomTypeId: typeA.id, number: '101' } })).id;
+  typeA = typeAFull.id;
+  roomA = (await owner.room.create({ data: { organizationId: orgA, propertyId: propA, roomTypeId: typeA, number: '101' } })).id;
   roomB = (await owner.room.create({ data: { organizationId: orgB, propertyId: propB, roomTypeId: typeB.id, number: '101' } })).id;
+  guestA = (await owner.guest.create({ data: { organizationId: orgA, firstName: 'Ann', lastName: 'A', email: `ann-${suffix}@example.com` } })).id;
+  guestB = (await owner.guest.create({ data: { organizationId: orgB, firstName: 'Bob', lastName: 'B' } })).id;
+  resB = (await owner.reservation.create({ data: { ...stay(orgB, propB, guestB, typeB.id, roomB, 'RB1', '2026-11-01', '2026-11-03') } })).id;
 });
 
 afterAll(async () => {
   await owner.auditLog.deleteMany({ where: { organizationId: { in: [orgA, orgB] } } });
+  await owner.reservation.deleteMany({ where: { organizationId: { in: [orgA, orgB] } } });
+  await owner.guest.deleteMany({ where: { organizationId: { in: [orgA, orgB] } } });
   await owner.room.deleteMany({ where: { organizationId: { in: [orgA, orgB] } } });
   await owner.roomType.deleteMany({ where: { organizationId: { in: [orgA, orgB] } } });
   await owner.property.deleteMany({ where: { organizationId: { in: [orgA, orgB] } } });
@@ -91,6 +106,43 @@ describe('tenant isolation (Row-Level Security)', () => {
     await owner.room.update({ where: { id: roomA }, data: { deletedAt: new Date() } });
     const reused = await owner.room.create({ data: { organizationId: orgA, propertyId: propA, roomTypeId: type.id, number: '101' } });
     expect(reused.id).not.toBe(roomA);
+  });
+
+  it('organization A cannot see or change organization B reservations or guests', async () => {
+    const seen = await asTenant(orgA, (tx) => tx.reservation.findMany({ where: { id: resB }, select: { id: true } }));
+    expect(seen).toHaveLength(0);
+    const guests = await asTenant(orgA, (tx) => tx.guest.findMany({ where: { id: { in: [guestA, guestB] } }, select: { id: true } }));
+    expect(guests.map((g) => g.id)).toEqual([guestA]);
+    const changed = await asTenant(orgA, (tx) => tx.reservation.updateMany({ where: { id: resB }, data: { status: 'CANCELLED' } }));
+    expect(changed.count).toBe(0);
+  });
+
+  describe('double-booking is refused by the database itself', () => {
+    const book = (code: string, arrival: string, departure: string, status: 'CONFIRMED' | 'CHECKED_IN' | 'CANCELLED' | 'CHECKED_OUT' = 'CONFIRMED') =>
+      owner.reservation.create({ data: stay(orgA, propA, guestA, typeA, roomA, code, arrival, departure, status) });
+
+    it('two active stays on the same room cannot overlap', async () => {
+      await book('RA1', '2026-12-01', '2026-12-05');
+      await expect(book('RA2', '2026-12-03', '2026-12-07')).rejects.toThrow();
+      await expect(book('RA3', '2026-12-01', '2026-12-02', 'CHECKED_IN')).rejects.toThrow();
+    });
+
+    it('same-day turnover is allowed (departure day = next arrival day)', async () => {
+      await expect(book('RA4', '2026-12-05', '2026-12-08')).resolves.toBeTruthy();
+    });
+
+    it('cancelled and checked-out stays do not block the room', async () => {
+      await expect(book('RA5', '2026-12-01', '2026-12-05', 'CANCELLED')).resolves.toBeTruthy();
+      await expect(book('RA6', '2026-12-02', '2026-12-04', 'CHECKED_OUT')).resolves.toBeTruthy();
+    });
+
+    it('rejects a stay whose departure is not after arrival', async () => {
+      await expect(book('RA7', '2027-01-05', '2027-01-05')).rejects.toThrow();
+    });
+  });
+
+  it('two live guests cannot share an email, regardless of capitals', async () => {
+    await expect(owner.guest.create({ data: { organizationId: orgA, firstName: 'Dup', lastName: 'Ann', email: `ANN-${suffix}@EXAMPLE.com` } })).rejects.toThrow();
   });
 
   it('the audit log is append-only for the application role', async () => {

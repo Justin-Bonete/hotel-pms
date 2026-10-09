@@ -10,8 +10,8 @@
  *
  * Only real Phase 1 data is created. No reservations, revenue, etc.
  */
-import { PrismaClient, PropertyType, RoomStatus, ScopeType, UserStatus } from '@prisma/client';
-import { PERMISSION_CATALOG, SYSTEM_ROLE_TEMPLATES } from '@pms/types';
+import { PrismaClient, PropertyType, ReservationSource, ReservationStatus, RoomStatus, ScopeType, UserStatus } from '@prisma/client';
+import { PERMISSION_CATALOG, SYSTEM_ROLE_TEMPLATES, addDays, nightsBetween, quoteStay, todayIn } from '@pms/types';
 import * as argon2 from 'argon2';
 
 const prisma = new PrismaClient();
@@ -127,6 +127,112 @@ async function seedRooms(organizationId: string, propertyId: string, slug: strin
   }
 }
 
+// ---------------------------------------------------------------- demo guests, rates, reservations
+const DEMO_GUESTS: Array<{ firstName: string; lastName: string; email: string; phone: string; country: string; isVip?: boolean }> = [
+  { firstName: 'Juan', lastName: 'Dela Cruz', email: 'juan.delacruz@example.com', phone: '+63 917 100 0001', country: 'PH' },
+  { firstName: 'Maria', lastName: 'Santos', email: 'maria.santos@example.com', phone: '+63 917 100 0002', country: 'PH', isVip: true },
+  { firstName: 'Jose', lastName: 'Reyes', email: 'jose.reyes@example.com', phone: '+63 917 100 0003', country: 'PH' },
+  { firstName: 'Ana', lastName: 'Garcia', email: 'ana.garcia@example.com', phone: '+63 917 100 0004', country: 'PH' },
+  { firstName: 'Carlos', lastName: 'Mendoza', email: 'carlos.mendoza@example.com', phone: '+63 917 100 0005', country: 'PH' },
+  { firstName: 'Sofia', lastName: 'Ramos', email: 'sofia.ramos@example.com', phone: '+63 917 100 0006', country: 'PH' },
+  { firstName: 'Miguel', lastName: 'Torres', email: 'miguel.torres@example.com', phone: '+63 917 100 0007', country: 'PH' },
+  { firstName: 'Isabella', lastName: 'Cruz', email: 'isabella.cruz@example.com', phone: '+63 917 100 0008', country: 'PH', isVip: true },
+  { firstName: 'Daniel', lastName: 'Lee', email: 'daniel.lee@example.com', phone: '+82 10 5555 0009', country: 'KR' },
+  { firstName: 'Emma', lastName: 'Wilson', email: 'emma.wilson@example.com', phone: '+1 415 555 0010', country: 'US' },
+  { firstName: 'Kenji', lastName: 'Tanaka', email: 'kenji.tanaka@example.com', phone: '+81 90 5555 0011', country: 'JP' },
+  { firstName: 'Liam', lastName: 'Brown', email: 'liam.brown@example.com', phone: '+61 400 555 012', country: 'AU' },
+];
+
+// Nightly / weekend rates in PESOS per room type (stored as centavos).
+const DEMO_RATES: Record<string, Record<string, [number, number]>> = {
+  'manila-grand': { Standard: [3500, 4000], Deluxe: [4500, 5200], Suite: [7500, 8500] },
+  'baguio-lodge': { Standard: [2800, 3200], 'Family Room': [4800, 5400] },
+  'la-union-resort': { Villa: [6500, 7200], 'Garden Suite': [5200, 5800] },
+};
+
+/** [status, offset of arrival from today, nights, roomType, assign room?, adults, children, source] */
+type DemoStay = [ReservationStatus, number, number, string, boolean, number, number, ReservationSource];
+const demoStays = (types: string[]): DemoStay[] => {
+  const [a, b, c = a] = types as [string, string, string?];
+  return [
+    ['CHECKED_IN', -2, 3, a, true, 2, 0, 'WALK_IN'],
+    ['CHECKED_IN', -1, 2, b, true, 2, 1, 'PHONE'],
+    ['CHECKED_IN', -3, 3, a, true, 1, 0, 'WEBSITE'],
+    ['CONFIRMED', 0, 2, a, true, 2, 0, 'PHONE'],
+    ['CONFIRMED', 0, 3, c, false, 3, 0, 'OTA'],
+    ['CONFIRMED', 1, 2, b, false, 2, 0, 'WEBSITE'],
+    ['CONFIRMED', 2, 4, a, true, 2, 1, 'CORPORATE'],
+    ['CONFIRMED', 5, 3, c, false, 2, 0, 'TRAVEL_AGENT'],
+    ['PENDING', 3, 2, b, false, 2, 0, 'PHONE'],
+    ['INQUIRY', 9, 2, a, false, 2, 0, 'WEBSITE'],
+    ['CHECKED_OUT', -9, 2, a, true, 2, 0, 'WALK_IN'],
+    ['CHECKED_OUT', -7, 3, b, true, 2, 0, 'OTA'],
+    ['CHECKED_OUT', -5, 2, a, true, 1, 0, 'PHONE'],
+    ['CANCELLED', 4, 2, a, false, 2, 0, 'WEBSITE'],
+  ];
+};
+
+/** Seeds rate plan, guests and reservations ONLY for a property that has none. Needs its rooms to exist. */
+async function seedReservations(organizationId: string, propertyId: string, slug: string, currency: string, timezone: string) {
+  const rates = DEMO_RATES[slug];
+  if (!rates) return;
+  if ((await prisma.reservation.count({ where: { propertyId } })) > 0) return;
+
+  const types = await prisma.roomType.findMany({ where: { propertyId, deletedAt: null }, orderBy: { name: 'asc' } });
+  const typeByName = new Map(types.map((t) => [t.name, t]));
+
+  const plan =
+    (await prisma.ratePlan.findFirst({ where: { propertyId, deletedAt: null, isDefault: true } })) ??
+    (await prisma.ratePlan.create({
+      data: {
+        organizationId, propertyId, name: 'Standard rate', description: 'Public rate, higher on Friday and Saturday nights', isDefault: true,
+        rates: { create: Object.entries(rates).map(([name, [nightly, weekend]]) => ({ organizationId, roomTypeId: typeByName.get(name)!.id, nightlyRateMinor: nightly * 100, weekendRateMinor: weekend * 100 })) },
+      },
+    }));
+  const rateRows = await prisma.ratePlanRate.findMany({ where: { ratePlanId: plan.id } });
+
+  const guests: string[] = [];
+  for (const g of DEMO_GUESTS) {
+    const existing = await prisma.guest.findFirst({ where: { organizationId, email: g.email } });
+    guests.push((existing ?? (await prisma.guest.create({ data: { organizationId, ...g } }))).id);
+  }
+
+  const today = todayIn(timezone);
+  const rooms = await prisma.room.findMany({ where: { propertyId, deletedAt: null, status: { in: ['AVAILABLE', 'INSPECTED'] } }, orderBy: { number: 'asc' } });
+  const roomsByType = new Map<string, typeof rooms>();
+  for (const r of rooms) roomsByType.set(r.roomTypeId, [...(roomsByType.get(r.roomTypeId) ?? []), r]);
+
+  const typeNames = types.map((t) => t.name);
+  let n = 0;
+  for (const [status, offset, nights, typeName, assign, adults, children, source] of demoStays(typeNames)) {
+    const type = typeByName.get(typeName)!;
+    const rate = rateRows.find((r) => r.roomTypeId === type.id);
+    if (!rate) continue;
+    const arrival = addDays(today, offset);
+    const departure = addDays(arrival, nights);
+    const quote = quoteStay(arrival, departure, { nightlyRateMinor: rate.nightlyRateMinor, weekendRateMinor: rate.weekendRateMinor });
+
+    let roomId: string | null = null;
+    if (assign) {
+      const free = (roomsByType.get(type.id) ?? []).shift();
+      roomId = free?.id ?? null;
+    }
+    if (status === 'CHECKED_IN' && !roomId) continue; // an in-house guest must have a room
+    n++;
+    await prisma.reservation.create({
+      data: {
+        organizationId, propertyId, code: `D${slug.slice(0, 2).toUpperCase()}${String(n).padStart(4, '0')}`,
+        guestId: guests[(n * 5) % guests.length]!, roomTypeId: type.id, roomId, ratePlanId: plan.id, status, source,
+        arrivalDate: new Date(`${arrival}T00:00:00.000Z`), departureDate: new Date(`${departure}T00:00:00.000Z`),
+        adults: Math.min(adults, type.maxOccupancy), children, nights: nightsBetween(arrival, departure), totalMinor: quote.totalMinor, currency,
+        checkedInAt: status === 'CHECKED_IN' || status === 'CHECKED_OUT' ? new Date(`${arrival}T06:00:00.000Z`) : null,
+        checkedOutAt: status === 'CHECKED_OUT' ? new Date(`${departure}T03:00:00.000Z`) : null,
+        cancelledAt: status === 'CANCELLED' ? new Date() : null, cancelReason: status === 'CANCELLED' ? 'Guest changed plans' : null,
+      },
+    });
+  }
+}
+
 async function seedPermissionsAndRoles() {
   for (const p of PERMISSIONS) {
     await prisma.permission.upsert({ where: { key: p.key }, update: p, create: p });
@@ -181,6 +287,7 @@ async function seedDemoOrganization() {
       },
     });
     await seedRooms(org.id, property.id, p.slug);
+    await seedReservations(org.id, property.id, p.slug, property.currency, property.timezone);
     for (const name of DEPARTMENTS) {
       await prisma.department.upsert({
         where: { propertyId_name: { propertyId: property.id, name } },

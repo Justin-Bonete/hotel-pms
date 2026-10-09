@@ -12,13 +12,17 @@ import { HealthModule } from './modules/health/health.module';
 import { BuildingsModule } from './modules/buildings/buildings.module';
 import { PropertiesModule } from './modules/properties/properties.module';
 import { PropertyGroupsModule } from './modules/property-groups/property-groups.module';
+import { GuestsModule } from './modules/guests/guests.module';
+import { RatesModule } from './modules/rates/rates.module';
+import { ReservationsModule } from './modules/reservations/reservations.module';
 import { RoomTypesModule } from './modules/room-types/room-types.module';
 import { RoomsModule } from './modules/rooms/rooms.module';
 import { MailModule } from './modules/mail/mail.module';
 
 @Module({
   imports: [ConfigModule, PrismaModule, RedisModule, AuditModule, MailModule, AuthModule, HealthModule,
-    PropertiesModule, PropertyGroupsModule, BuildingsModule, RoomTypesModule, RoomsModule],
+    PropertiesModule, PropertyGroupsModule, BuildingsModule, RoomTypesModule, RoomsModule,
+    GuestsModule, RatesModule, ReservationsModule],
   providers: [
     { provide: APP_FILTER, useClass: AllExceptionsFilter },
     // Order matters: context first (outermost), then the response envelope.

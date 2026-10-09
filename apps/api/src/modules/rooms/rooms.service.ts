@@ -1,6 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import type { Prisma } from '@prisma/client';
-import { RESTRICTED_ROOM_STATUSES, canTransition, type RoomView } from '@pms/types';
+import { RESTRICTED_ROOM_STATUSES, canTransition, parseDate, toDateString, todayIn, type RoomView } from '@pms/types';
 import type { RoomInput, RoomStatusInput, RoomsQuery, UpdateRoomInput } from '@pms/validation';
 import type { AccessContext } from '../../common/access/access-context';
 import { assertCan } from '../../common/access/assert-access';
@@ -17,7 +17,7 @@ const include = {
 } satisfies Prisma.RoomInclude;
 type Row = Prisma.RoomGetPayload<{ include: typeof include }>;
 
-const toView = (r: Row): RoomView => ({
+const toView = (r: Row, derived: RoomView['derived'] = null): RoomView => ({
   id: r.id,
   propertyId: r.propertyId,
   number: r.number,
@@ -30,6 +30,7 @@ const toView = (r: Row): RoomView => ({
   floorId: r.floorId,
   floorLevel: r.floor?.level ?? null,
   floorLabel: r.floor ? `${r.floor.building.name} · ${r.floor.name ?? `Floor ${r.floor.level}`}` : null,
+  derived,
 });
 
 @Injectable()
@@ -49,15 +50,36 @@ export class RoomsService {
       ...(query.floorId ? { floorId: query.floorId } : {}),
       ...(query.search ? { number: { contains: query.search, mode: 'insensitive' as const } } : {}),
     };
-    const { rows, total } = await this.prisma.forTenant(async (tx) => {
-      await this.requireProperty(tx, propertyId);
+    const { rows, total, derived } = await this.prisma.forTenant(async (tx) => {
+      const property = await tx.property.findFirst({ where: { id: propertyId, deletedAt: null }, select: { timezone: true } });
+      if (!property) throw notFound('Property');
       const [rows, total] = await Promise.all([
         tx.room.findMany({ where, orderBy: { number: 'asc' }, skip: (query.page - 1) * query.pageSize, take: query.pageSize, include }),
         tx.room.count({ where }),
       ]);
-      return { rows, total };
+
+      // Occupied / Reserved / Due out come from today's reservations (property's own timezone).
+      const today = todayIn(property.timezone);
+      const ids = rows.map((r) => r.id);
+      const active = ids.length
+        ? await tx.reservation.findMany({
+            where: {
+              propertyId,
+              roomId: { in: ids },
+              OR: [{ status: 'CHECKED_IN' }, { status: { in: ['PENDING', 'CONFIRMED'] }, arrivalDate: parseDate(today) }],
+            },
+            select: { roomId: true, status: true, departureDate: true },
+          })
+        : [];
+      const derived = new Map<string, RoomView['derived']>();
+      for (const a of active) {
+        if (!a.roomId) continue;
+        if (a.status === 'CHECKED_IN') derived.set(a.roomId, toDateString(a.departureDate) <= today ? 'DUE_OUT' : 'OCCUPIED');
+        else if (!derived.has(a.roomId)) derived.set(a.roomId, 'RESERVED');
+      }
+      return { rows, total, derived };
     });
-    return new Paginated(rows.map(toView), { page: query.page, pageSize: query.pageSize, total });
+    return new Paginated(rows.map((r) => toView(r, derived.get(r.id) ?? null)), { page: query.page, pageSize: query.pageSize, total });
   }
 
   async create(propertyId: string, dto: RoomInput, access: AccessContext): Promise<RoomView> {

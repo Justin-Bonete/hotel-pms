@@ -12,3 +12,9 @@ export const STATUS_META: Record<RoomStatus, { label: string; tile: string; dot:
 
 /** Compare "101", "2A", "V03" the way people expect (numeric parts in order). */
 export const compareRoomNumbers = (a: string, b: string): number => a.localeCompare(b, undefined, { numeric: true });
+
+export const DERIVED_META = {
+  OCCUPIED: { label: 'Occupied', tile: 'bg-violet-50 ring-violet-300 text-violet-900', dot: 'bg-violet-500' },
+  RESERVED: { label: 'Reserved', tile: 'bg-blue-50 ring-blue-300 text-blue-900', dot: 'bg-blue-500' },
+  DUE_OUT: { label: 'Due out', tile: 'bg-fuchsia-50 ring-fuchsia-300 text-fuchsia-900', dot: 'bg-fuchsia-500' },
+} as const;

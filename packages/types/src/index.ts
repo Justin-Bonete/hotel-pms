@@ -58,6 +58,8 @@ export interface DeviceSession {
 
 export * from './permissions';
 export * from './rooms';
+export * from './pricing';
+export * from './reservations';
 
 export interface AccessSummary {
   roles: Array<{ key: string; scopeType: ScopeType; scopeId: string }>;

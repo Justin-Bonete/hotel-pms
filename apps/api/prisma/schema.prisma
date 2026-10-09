@@ -67,6 +67,31 @@ enum AuthTokenType {
   @@map("auth_token_type")
 }
 
+enum ReservationStatus {
+  INQUIRY
+  PENDING
+  CONFIRMED
+  CHECKED_IN
+  CHECKED_OUT
+  CANCELLED
+  NO_SHOW
+
+  @@map("reservation_status")
+}
+
+enum ReservationSource {
+  WALK_IN
+  PHONE
+  WEBSITE
+  OTA
+  GROUP
+  CORPORATE
+  TRAVEL_AGENT
+  OTHER
+
+  @@map("reservation_source")
+}
+
 // Stored statuses only. OCCUPIED / RESERVED / DUE_OUT are derived from reservations (Phase 3).
 enum RoomStatus {
   AVAILABLE
@@ -104,6 +129,10 @@ model Organization {
   auditLogs      AuditLog[]
   roomTypes      RoomType[]
   rooms          Room[]
+  guests         Guest[]
+  ratePlans      RatePlan[]
+  ratePlanRates  RatePlanRate[]
+  reservations   Reservation[]
 
   @@map("organizations")
 }
@@ -154,6 +183,8 @@ model Property {
   buildings    Building[]
   roomTypes    RoomType[]
   rooms        Room[]
+  ratePlans    RatePlan[]
+  reservations Reservation[]
 
   @@unique([organizationId, slug])
   @@index([organizationId, groupId])
@@ -401,6 +432,8 @@ model RoomType {
   organization Organization @relation(fields: [organizationId], references: [id])
   property     Property     @relation(fields: [propertyId], references: [id])
   rooms        Room[]
+  rates        RatePlanRate[]
+  reservations Reservation[]
 
   // Name uniqueness among non-archived types is a partial unique index in prisma/sql/rls.sql.
   @@index([organizationId])
@@ -427,10 +460,125 @@ model Room {
   property     Property     @relation(fields: [propertyId], references: [id])
   roomType     RoomType     @relation(fields: [roomTypeId], references: [id])
   floor        Floor?       @relation(fields: [floorId], references: [id])
+  reservations Reservation[]
 
   // Room number uniqueness among non-archived rooms is a partial unique index in prisma/sql/rls.sql.
   @@index([organizationId, propertyId, status])
   @@index([propertyId, roomTypeId])
   @@index([floorId])
   @@map("rooms")
+}
+
+// ---------------------------------------------------------------- guests, rates, reservations (Phase 3)
+
+// Guests belong to the ORGANIZATION (one profile across all its properties).
+model Guest {
+  id             String    @id @default(uuid()) @db.Uuid
+  organizationId String    @map("organization_id") @db.Uuid
+  firstName      String    @map("first_name")
+  lastName       String    @map("last_name")
+  email          String?
+  phone          String?
+  country        String?   @db.Char(2)
+  preferences    String?
+  notes          String?
+  isVip          Boolean   @default(false) @map("is_vip")
+  createdAt      DateTime  @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt      DateTime  @updatedAt @map("updated_at") @db.Timestamptz
+  deletedAt      DateTime? @map("deleted_at") @db.Timestamptz
+
+  organization Organization  @relation(fields: [organizationId], references: [id])
+  reservations Reservation[]
+
+  // Email uniqueness among non-archived guests is a partial unique index in prisma/sql/rls.sql.
+  @@index([organizationId, lastName])
+  @@index([organizationId, email])
+  @@map("guests")
+}
+
+model RatePlan {
+  id             String    @id @default(uuid()) @db.Uuid
+  organizationId String    @map("organization_id") @db.Uuid
+  propertyId     String    @map("property_id") @db.Uuid
+  name           String
+  description    String?
+  isDefault      Boolean   @default(false) @map("is_default")
+  createdAt      DateTime  @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt      DateTime  @updatedAt @map("updated_at") @db.Timestamptz
+  deletedAt      DateTime? @map("deleted_at") @db.Timestamptz
+
+  organization Organization   @relation(fields: [organizationId], references: [id])
+  property     Property       @relation(fields: [propertyId], references: [id])
+  rates        RatePlanRate[]
+  reservations Reservation[]
+
+  @@index([organizationId])
+  @@index([propertyId])
+  @@map("rate_plans")
+}
+
+/// Money is stored as whole minor units (centavos). Never decimals.
+model RatePlanRate {
+  id               String   @id @default(uuid()) @db.Uuid
+  organizationId   String   @map("organization_id") @db.Uuid
+  ratePlanId       String   @map("rate_plan_id") @db.Uuid
+  roomTypeId       String   @map("room_type_id") @db.Uuid
+  nightlyRateMinor Int      @map("nightly_rate_minor")
+  weekendRateMinor Int?     @map("weekend_rate_minor")
+  createdAt        DateTime @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt        DateTime @updatedAt @map("updated_at") @db.Timestamptz
+
+  organization Organization @relation(fields: [organizationId], references: [id])
+  ratePlan     RatePlan     @relation(fields: [ratePlanId], references: [id], onDelete: Cascade)
+  roomType     RoomType     @relation(fields: [roomTypeId], references: [id])
+
+  @@unique([ratePlanId, roomTypeId])
+  @@index([organizationId])
+  @@map("rate_plan_rates")
+}
+
+model Reservation {
+  id              String            @id @default(uuid()) @db.Uuid
+  organizationId  String            @map("organization_id") @db.Uuid
+  propertyId      String            @map("property_id") @db.Uuid
+  code            String
+  guestId         String            @map("guest_id") @db.Uuid
+  roomTypeId      String            @map("room_type_id") @db.Uuid
+  roomId          String?           @map("room_id") @db.Uuid
+  ratePlanId      String?           @map("rate_plan_id") @db.Uuid
+  status          ReservationStatus @default(CONFIRMED)
+  source          ReservationSource @default(PHONE)
+  /// Stay dates, no time of day. Departure date is the check-out day (that night is NOT part of the stay).
+  arrivalDate     DateTime          @map("arrival_date") @db.Date
+  departureDate   DateTime          @map("departure_date") @db.Date
+  adults          Int               @default(1)
+  children        Int               @default(0)
+  nights          Int
+  totalMinor      Int               @map("total_minor")
+  currency        String            @db.Char(3)
+  specialRequests String?           @map("special_requests")
+  notes           String?
+  cancelReason    String?           @map("cancel_reason")
+  cancelledAt     DateTime?         @map("cancelled_at") @db.Timestamptz
+  checkedInAt     DateTime?         @map("checked_in_at") @db.Timestamptz
+  checkedOutAt    DateTime?         @map("checked_out_at") @db.Timestamptz
+  createdById     String?           @map("created_by_id") @db.Uuid
+  createdAt       DateTime          @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt       DateTime          @updatedAt @map("updated_at") @db.Timestamptz
+
+  organization Organization @relation(fields: [organizationId], references: [id])
+  property     Property     @relation(fields: [propertyId], references: [id])
+  guest        Guest        @relation(fields: [guestId], references: [id])
+  roomType     RoomType     @relation(fields: [roomTypeId], references: [id])
+  room         Room?        @relation(fields: [roomId], references: [id])
+  ratePlan     RatePlan?    @relation(fields: [ratePlanId], references: [id])
+
+  // DB-level guards (prisma/sql/rls.sql): no two active stays may overlap on the same room (exclusion
+  // constraint), departure must be after arrival, adults >= 1, total >= 0.
+  @@unique([organizationId, code])
+  @@index([organizationId, propertyId, arrivalDate])
+  @@index([propertyId, status])
+  @@index([guestId])
+  @@index([roomId])
+  @@map("reservations")
 }

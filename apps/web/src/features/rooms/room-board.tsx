@@ -1,6 +1,6 @@
 'use client';
 
-import { DERIVED_ROOM_STATUSES, RESTRICTED_ROOM_STATUSES, ROOM_STATUSES, ROOM_STATUS_TRANSITIONS, type RoomStatus, type RoomView } from '@pms/types';
+import { RESTRICTED_ROOM_STATUSES, ROOM_STATUSES, ROOM_STATUS_TRANSITIONS, type RoomStatus, type RoomView } from '@pms/types';
 import { useMutation } from '@tanstack/react-query';
 import { useMemo, useState } from 'react';
 import { Modal } from '@/components/ui/modal';
@@ -9,25 +9,28 @@ import { useAccess } from '@/features/access/access-context';
 import { api } from '@/lib/api';
 import { cn } from '@/lib/utils';
 import { useRefreshRooms, useRooms } from './queries';
-import { STATUS_META, compareRoomNumbers } from './status';
+import { DERIVED_META, STATUS_META, compareRoomNumbers } from './status';
 
 export function RoomBoard({ propertyId }: { propertyId: string }) {
   const rooms = useRooms(propertyId);
   const [active, setActive] = useState<RoomView | null>(null);
 
-  const { counts, floors } = useMemo(() => {
+  const { counts, derivedCounts, floors } = useMemo(() => {
     const counts = Object.fromEntries(ROOM_STATUSES.map((s) => [s, 0])) as Record<RoomStatus, number>;
-    const byFloor = new Map<string, { level: number; label: string; rooms: RoomView[] }>();
+    const derivedCounts = { OCCUPIED: 0, RESERVED: 0, DUE_OUT: 0 };
+    type FloorGroup = { level: number; label: string; rooms: RoomView[] };
+    const byFloor = new Map<string, FloorGroup>();
     for (const r of rooms.data ?? []) {
       counts[r.status] += 1;
+      if (r.derived) derivedCounts[r.derived] += 1;
       const key = r.floorId ?? 'none';
-      const group = byFloor.get(key) ?? { level: r.floorLevel ?? 9999, label: r.floorLabel ?? 'No floor assigned', rooms: [] };
+      const group: FloorGroup = byFloor.get(key) ?? { level: r.floorLevel ?? 9999, label: r.floorLabel ?? 'No floor assigned', rooms: [] };
       group.rooms.push(r);
       byFloor.set(key, group);
     }
     const floors = [...byFloor.values()].sort((a, b) => a.level - b.level);
     floors.forEach((f) => f.rooms.sort((a, b) => compareRoomNumbers(a.number, b.number)));
-    return { counts, floors };
+    return { counts, derivedCounts, floors };
   }, [rooms.data]);
 
   if (rooms.isLoading) return <Spinner label="Loading rooms" />;
@@ -39,6 +42,12 @@ export function RoomBoard({ propertyId }: { propertyId: string }) {
   return (
     <div className="space-y-6">
       <div className="flex flex-wrap gap-2" aria-label="Room status summary">
+        {(['OCCUPIED', 'RESERVED', 'DUE_OUT'] as const).map((d) => (
+          <span key={d} className={cn('inline-flex items-center gap-2 rounded-full px-3 py-1 text-xs font-medium ring-1 ring-inset', DERIVED_META[d].tile)}>
+            <span className={cn('h-2 w-2 rounded-full', DERIVED_META[d].dot)} aria-hidden />
+            {DERIVED_META[d].label} · {derivedCounts[d]}
+          </span>
+        ))}
         {ROOM_STATUSES.map((s) => (
           <span key={s} className={cn('inline-flex items-center gap-2 rounded-full px-3 py-1 text-xs font-medium ring-1 ring-inset', STATUS_META[s].tile)}>
             <span className={cn('h-2 w-2 rounded-full', STATUS_META[s].dot)} aria-hidden />
@@ -52,10 +61,13 @@ export function RoomBoard({ propertyId }: { propertyId: string }) {
           <h3 className="mb-2 text-sm font-semibold text-slate-700">{floor.label}</h3>
           <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4 xl:grid-cols-6">
             {floor.rooms.map((r) => (
-              <button key={r.id} type="button" onClick={() => setActive(r)} className={cn('rounded-xl p-3 text-left ring-1 ring-inset transition hover:shadow-md', STATUS_META[r.status].tile)}>
+              <button key={r.id} type="button" onClick={() => setActive(r)} className={cn('rounded-xl p-3 text-left ring-1 ring-inset transition hover:shadow-md', r.derived ? DERIVED_META[r.derived].tile : STATUS_META[r.status].tile)}>
                 <span className="block text-lg font-semibold">{r.number}</span>
                 <span className="block truncate text-xs opacity-80">{r.roomTypeName}</span>
-                <span className="mt-1 block text-xs font-medium">{STATUS_META[r.status].label}</span>
+                <span className="mt-1 block text-xs font-medium">
+                  {r.derived ? DERIVED_META[r.derived].label : STATUS_META[r.status].label}
+                  {r.derived && r.status !== 'AVAILABLE' && <span className="font-normal opacity-80"> · {STATUS_META[r.status].label}</span>}
+                </span>
               </button>
             ))}
           </div>
@@ -63,7 +75,7 @@ export function RoomBoard({ propertyId }: { propertyId: string }) {
       ))}
 
       <p className="text-xs text-slate-500">
-        Refreshes every 15 seconds; instant live updates arrive in Phase 4. {DERIVED_ROOM_STATUSES.length} more statuses (Occupied, Reserved, Due out) appear once reservations exist (Phase 3).
+        Refreshes every 15 seconds; instant live updates arrive in Phase 4. Occupied, Reserved and Due out come from today’s reservations; the smaller label is the housekeeping status.
       </p>
 
       <StatusModal room={active} propertyId={propertyId} onClose={() => setActive(null)} />

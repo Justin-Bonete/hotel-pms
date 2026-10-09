@@ -92,3 +92,24 @@ Then `pnpm test`, `pnpm test:int`, `pnpm dev:api`, `pnpm dev:web`.
 
 New API routes (all permission-checked and audit-logged): `/properties` (create, edit, archive), `/property-groups`,
 `/properties/:id/structure|buildings|room-types|rooms`, `/room-types/:id`, `/rooms/:id`, `/rooms/:id/status`.
+
+## Guests, rates, reservations, calendar (Phase 3a)
+
+```bash
+pnpm install
+pnpm build:packages
+pnpm db:migrate     # name it: phase3a_reservations
+pnpm db:rls         # security rules + the database-level double-booking guard (exclusion constraint)
+pnpm db:seed        # demo guests, a default rate plan per property, and reservations around today
+pnpm test && pnpm test:int
+```
+
+If `db:migrate` reports **"Drift detected"** (Prisma notices the extra constraints/indexes that `db:rls` adds), it is a
+development database: run `pnpm db:reset` (drops, re-migrates, re-applies the rules, re-seeds). Never do this in production.
+
+Rules enforced by the API (and, for double-booking, by PostgreSQL itself):
+- Stays are dates; the departure day is free again (same-day turnover works). Money is whole centavos.
+- Every night of a stay needs a free room of the booked type; bookings for the same room type take turns (advisory lock).
+- A room can never hold two active stays that overlap (exclusion constraint), even if application code is bypassed.
+- Check-in needs a clean room (Available or Inspected); check-out marks the room Dirty so housekeeping sees it at once.
+- Housekeeping, maintenance and cashier roles cannot see guests, reservations or rates.

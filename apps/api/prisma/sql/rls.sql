@@ -24,7 +24,7 @@ BEGIN
   FOREACH t IN ARRAY ARRAY[
     'property_groups','properties','departments','buildings','floors',
     'users','user_sessions','auth_tokens','user_role_assignments','audit_logs',
-    'room_types','rooms'
+    'room_types','rooms','guests','rate_plans','rate_plan_rates','reservations'
   ] LOOP
     EXECUTE format('ALTER TABLE %I ENABLE ROW LEVEL SECURITY', t);
     EXECUTE format('DROP POLICY IF EXISTS tenant_isolation ON %I', t);
@@ -56,11 +56,34 @@ CREATE UNIQUE INDEX IF NOT EXISTS roles_system_key_unique ON roles (key) WHERE o
 CREATE UNIQUE INDEX IF NOT EXISTS rooms_property_number_unique ON rooms (property_id, number) WHERE deleted_at IS NULL;
 CREATE UNIQUE INDEX IF NOT EXISTS room_types_property_name_unique ON room_types (property_id, lower(name)) WHERE deleted_at IS NULL;
 
+CREATE UNIQUE INDEX IF NOT EXISTS guests_org_email_unique ON guests (organization_id, lower(email)) WHERE email IS NOT NULL AND deleted_at IS NULL;
+
+-- ---- Reservations: the database itself refuses double-booking, whatever the application does.
+CREATE EXTENSION IF NOT EXISTS btree_gist;
+
+DO $$
+BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'reservations_no_room_overlap') THEN
+    ALTER TABLE reservations ADD CONSTRAINT reservations_no_room_overlap
+      EXCLUDE USING gist (room_id WITH =, daterange(arrival_date, departure_date, '[)') WITH &&)
+      WHERE (room_id IS NOT NULL AND status IN ('PENDING', 'CONFIRMED', 'CHECKED_IN'));
+  END IF;
+  IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'reservations_dates_check') THEN
+    ALTER TABLE reservations ADD CONSTRAINT reservations_dates_check CHECK (departure_date > arrival_date);
+  END IF;
+  IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'reservations_guests_check') THEN
+    ALTER TABLE reservations ADD CONSTRAINT reservations_guests_check CHECK (adults >= 1 AND children >= 0 AND total_minor >= 0);
+  END IF;
+  IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'rate_plan_rates_nonnegative_check') THEN
+    ALTER TABLE rate_plan_rates ADD CONSTRAINT rate_plan_rates_nonnegative_check CHECK (nightly_rate_minor >= 0 AND (weekend_rate_minor IS NULL OR weekend_rate_minor >= 0));
+  END IF;
+END $$;
+
 -- ------------------------------------------------------------ grants (least privilege)
 GRANT SELECT, INSERT, UPDATE, DELETE ON
   organizations, property_groups, properties, departments, buildings, floors,
   users, user_sessions, auth_tokens, roles, role_permissions, user_role_assignments,
-  room_types, rooms
+  room_types, rooms, guests, rate_plans, rate_plan_rates, reservations
 TO pms_app;
 
 -- Permissions are code-defined and seeded by the owner role only.

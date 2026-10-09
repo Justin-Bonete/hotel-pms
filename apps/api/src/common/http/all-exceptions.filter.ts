@@ -55,6 +55,15 @@ export class AllExceptionsFilter implements ExceptionFilter {
       return { status, body: { code: STATUS_CODES[status] ?? 'HTTP_ERROR', message } };
     }
 
+    // Backstop: the database refused an overlapping booking on the same room (exclusion constraint).
+    // Matched on the message so it works whichever Prisma error class carries it.
+    if (exception instanceof Error && /reservations_no_room_overlap|exclusion constraint/i.test(exception.message)) {
+      return {
+        status: HttpStatus.CONFLICT,
+        body: { code: 'ROOM_UNAVAILABLE', message: 'That room is already booked for some of those dates.' },
+      };
+    }
+
     if (exception instanceof Prisma.PrismaClientKnownRequestError) {
       switch (exception.code) {
         case 'P2002':

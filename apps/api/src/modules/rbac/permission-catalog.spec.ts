@@ -32,7 +32,7 @@ describe('system roles', () => {
 
   it('operational roles never receive administration permissions', () => {
     const forbiddenPrefixes = ['staff.', 'role.', 'audit.', 'organization.', 'property_group.'];
-    const forbiddenExact = ['property.create', 'property.update', 'property.delete', 'room.manage', 'room_type.manage'];
+    const forbiddenExact = ['property.create', 'property.update', 'property.delete', 'room.manage', 'room_type.manage', 'rate.manage'];
     for (const key of OPERATIONAL_ROLE_KEYS) {
       for (const p of role(key).permissions) {
         expect(forbiddenPrefixes.some((prefix) => p.startsWith(prefix)), `${key} must not have ${p}`).toBe(false);
@@ -52,6 +52,33 @@ describe('system roles', () => {
         expect(r.permissions.includes(p), `${r.key} / ${p}`).toBe(allowed.includes(r.key));
       }
     }
+  });
+
+  it('housekeeping, maintenance and cashier cannot see guests, reservations or rates', () => {
+    for (const key of ['HOUSEKEEPER', 'HOUSEKEEPING_SUPERVISOR', 'MAINTENANCE', 'CASHIER', 'INVENTORY_MANAGER']) {
+      for (const p of ['guest.read', 'guest.manage', 'reservation.read', 'reservation.manage', 'reservation.check_in', 'rate.read', 'rate.manage'] as const) {
+        expect(role(key).permissions, `${key} must not have ${p}`).not.toContain(p);
+      }
+    }
+  });
+
+  it('front desk can take reservations and check guests in, but cannot change rates', () => {
+    for (const key of ['FRONT_DESK', 'RECEPTIONIST']) {
+      for (const p of ['guest.read', 'guest.manage', 'reservation.read', 'reservation.manage', 'reservation.check_in', 'rate.read'] as const) {
+        expect(role(key).permissions).toContain(p);
+      }
+      expect(role(key).permissions).not.toContain('rate.manage');
+    }
+  });
+
+  it('only owners and managers can change rates', () => {
+    const allowed = ['OWNER', 'SUPER_ADMIN', 'GENERAL_MANAGER', 'PROPERTY_MANAGER'];
+    for (const r of SYSTEM_ROLE_TEMPLATES) expect(r.permissions.includes('rate.manage'), r.key).toBe(allowed.includes(r.key));
+  });
+
+  it('an accountant can read reservations and rates but cannot change anything', () => {
+    expect(role('ACCOUNTANT').permissions).toContain('reservation.read');
+    for (const p of ['reservation.manage', 'reservation.check_in', 'rate.manage', 'guest.manage'] as const) expect(role('ACCOUNTANT').permissions).not.toContain(p);
   });
 
   it('front desk and housekeeping can update room status', () => {

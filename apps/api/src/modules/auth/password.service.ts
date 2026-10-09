@@ -19,7 +19,7 @@ export class PasswordService {
 
   /** Burn the same CPU time as a real check so unknown emails aren't distinguishable by speed. */
   async spendVerifyTime(plain: string): Promise<void> {
-    this.dummyHash ??= argon2.hash('timing-equalizer-not-a-real-password', { type: argon2.argon2id });
-    await this.verify(await this.dummyHash, plain);
+    const dummy = await (this.dummyHash ??= argon2.hash('timing-equalizer-not-a-real-password', { type: argon2.argon2id }));
+    await this.verify(dummy, plain);
   }
 }

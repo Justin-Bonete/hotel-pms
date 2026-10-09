@@ -77,7 +77,7 @@ export function refreshSession(): Promise<AuthPayload | null> {
         return null;
       })
       .finally(() => {
-        
+        // Keep the result briefly so React StrictMode's double effect reuses it.
         setTimeout(() => {
           inflight = null;
         }, 2000);
