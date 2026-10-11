@@ -52,6 +52,8 @@ export const transitionSchema = z.object({
   action: z.enum(RESERVATION_ACTIONS),
   reason: z.string().trim().max(300).optional(),
   roomId: z.string().uuid().optional(),
+  /** Check out even though the folio is not settled. Needs folio.override_checkout. */
+  overrideBalance: z.boolean().optional(),
 });
 
 export const reservationsQuerySchema = z.object({

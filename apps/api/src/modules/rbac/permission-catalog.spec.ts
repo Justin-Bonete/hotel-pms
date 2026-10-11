@@ -32,7 +32,7 @@ describe('system roles', () => {
 
   it('operational roles never receive administration permissions', () => {
     const forbiddenPrefixes = ['staff.', 'role.', 'audit.', 'organization.', 'property_group.'];
-    const forbiddenExact = ['property.create', 'property.update', 'property.delete', 'room.manage', 'room_type.manage', 'rate.manage'];
+    const forbiddenExact = ['property.create', 'property.update', 'property.delete', 'room.manage', 'room_type.manage', 'rate.manage', 'folio.adjust', 'payment.refund', 'folio.override_checkout', 'tax.manage'];
     for (const key of OPERATIONAL_ROLE_KEYS) {
       for (const p of role(key).permissions) {
         expect(forbiddenPrefixes.some((prefix) => p.startsWith(prefix)), `${key} must not have ${p}`).toBe(false);
@@ -79,6 +79,34 @@ describe('system roles', () => {
   it('an accountant can read reservations and rates but cannot change anything', () => {
     expect(role('ACCOUNTANT').permissions).toContain('reservation.read');
     for (const p of ['reservation.manage', 'reservation.check_in', 'rate.manage', 'guest.manage'] as const) expect(role('ACCOUNTANT').permissions).not.toContain(p);
+  });
+
+  it('front desk can take payments and post charges, but cannot discount, refund, override or change taxes', () => {
+    for (const key of ['FRONT_DESK', 'RECEPTIONIST']) {
+      for (const p of ['folio.read', 'folio.charge', 'payment.take'] as const) expect(role(key).permissions).toContain(p);
+      for (const p of ['folio.adjust', 'payment.refund', 'folio.override_checkout', 'tax.manage'] as const) expect(role(key).permissions, `${key} must not have ${p}`).not.toContain(p);
+    }
+  });
+
+  it('only owners and managers can refund, adjust, override a check-out or set taxes', () => {
+    const allowed = ['OWNER', 'SUPER_ADMIN', 'GENERAL_MANAGER', 'PROPERTY_MANAGER'];
+    for (const r of SYSTEM_ROLE_TEMPLATES) {
+      for (const p of ['folio.adjust', 'payment.refund', 'folio.override_checkout', 'tax.manage'] as const) {
+        expect(r.permissions.includes(p), `${r.key} / ${p}`).toBe(allowed.includes(r.key));
+      }
+    }
+  });
+
+  it('a cashier can take payments and see folios only; an accountant can read but not touch money', () => {
+    expect([...role('CASHIER').permissions].sort()).toEqual(['folio.read', 'payment.take', 'property.read', 'reservation.read']);
+    for (const p of ['payment.take', 'folio.charge', 'payment.refund', 'folio.adjust'] as const) expect(role('ACCOUNTANT').permissions).not.toContain(p);
+    expect(role('ACCOUNTANT').permissions).toContain('folio.read');
+  });
+
+  it('housekeeping, maintenance and inventory staff have no billing access at all', () => {
+    for (const key of ['HOUSEKEEPER', 'HOUSEKEEPING_SUPERVISOR', 'MAINTENANCE', 'INVENTORY_MANAGER']) {
+      expect(role(key).permissions.filter((p) => p.startsWith('folio.') || p.startsWith('payment.') || p.startsWith('tax.')), key).toEqual([]);
+    }
   });
 
   it('front desk and housekeeping can update room status', () => {

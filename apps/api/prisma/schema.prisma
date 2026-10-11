@@ -92,6 +92,34 @@ enum ReservationSource {
   @@map("reservation_source")
 }
 
+enum FolioStatus {
+  OPEN
+  CLOSED
+
+  @@map("folio_status")
+}
+
+enum FolioItemType {
+  ROOM_CHARGE
+  EXTRA_CHARGE
+  TAX
+  DISCOUNT
+  ADJUSTMENT
+  REVERSAL
+
+  @@map("folio_item_type")
+}
+
+enum PaymentMethod {
+  CASH
+  CARD
+  BANK_TRANSFER
+  E_WALLET
+  OTHER
+
+  @@map("payment_method")
+}
+
 // Stored statuses only. OCCUPIED / RESERVED / DUE_OUT are derived from reservations (Phase 3).
 enum RoomStatus {
   AVAILABLE
@@ -133,6 +161,11 @@ model Organization {
   ratePlans      RatePlan[]
   ratePlanRates  RatePlanRate[]
   reservations   Reservation[]
+  taxes          Tax[]
+  folios         Folio[]
+  folioItems     FolioItem[]
+  payments       Payment[]
+  refunds        Refund[]
 
   @@map("organizations")
 }
@@ -185,6 +218,8 @@ model Property {
   rooms        Room[]
   ratePlans    RatePlan[]
   reservations Reservation[]
+  taxes        Tax[]
+  folios       Folio[]
 
   @@unique([organizationId, slug])
   @@index([organizationId, groupId])
@@ -555,6 +590,8 @@ model Reservation {
   children        Int               @default(0)
   nights          Int
   totalMinor      Int               @map("total_minor")
+  /// Per-night prices (whole minor units) at booking time, so billing honours the quoted price.
+  nightlyRates    Json?             @map("nightly_rates")
   currency        String            @db.Char(3)
   specialRequests String?           @map("special_requests")
   notes           String?
@@ -572,6 +609,7 @@ model Reservation {
   roomType     RoomType     @relation(fields: [roomTypeId], references: [id])
   room         Room?        @relation(fields: [roomId], references: [id])
   ratePlan     RatePlan?    @relation(fields: [ratePlanId], references: [id])
+  folio        Folio?
 
   // DB-level guards (prisma/sql/rls.sql): no two active stays may overlap on the same room (exclusion
   // constraint), departure must be after arrival, adults >= 1, total >= 0.
@@ -581,4 +619,128 @@ model Reservation {
   @@index([guestId])
   @@index([roomId])
   @@map("reservations")
+}
+
+// ---------------------------------------------------------------- billing (Phase 3b)
+// The ledger is APPEND-ONLY: folio_items, payments and refunds can be inserted but never updated or deleted
+// by the application role (see prisma/sql/rls.sql). Mistakes are fixed with reversing entries.
+
+/// Percentage taxes and service charges per property. Rate in basis points: 1200 = 12%.
+model Tax {
+  id              String    @id @default(uuid()) @db.Uuid
+  organizationId  String    @map("organization_id") @db.Uuid
+  propertyId      String    @map("property_id") @db.Uuid
+  name            String
+  rateBps         Int       @map("rate_bps")
+  appliesToRoom   Boolean   @default(true) @map("applies_to_room")
+  appliesToExtras Boolean   @default(true) @map("applies_to_extras")
+  isActive        Boolean   @default(true) @map("is_active")
+  createdAt       DateTime  @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt       DateTime  @updatedAt @map("updated_at") @db.Timestamptz
+  deletedAt       DateTime? @map("deleted_at") @db.Timestamptz
+
+  organization Organization @relation(fields: [organizationId], references: [id])
+  property     Property     @relation(fields: [propertyId], references: [id])
+
+  @@index([organizationId])
+  @@index([propertyId])
+  @@map("taxes")
+}
+
+model Folio {
+  id                  String      @id @default(uuid()) @db.Uuid
+  organizationId      String      @map("organization_id") @db.Uuid
+  propertyId          String      @map("property_id") @db.Uuid
+  reservationId       String      @unique @map("reservation_id") @db.Uuid
+  status              FolioStatus @default(OPEN)
+  currency            String      @db.Char(3)
+  roomChargesPostedAt DateTime?   @map("room_charges_posted_at") @db.Timestamptz
+  closedAt            DateTime?   @map("closed_at") @db.Timestamptz
+  createdAt           DateTime    @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt           DateTime    @updatedAt @map("updated_at") @db.Timestamptz
+
+  organization Organization @relation(fields: [organizationId], references: [id])
+  property     Property     @relation(fields: [propertyId], references: [id])
+  reservation  Reservation  @relation(fields: [reservationId], references: [id])
+  items        FolioItem[]
+  payments     Payment[]
+
+  @@index([organizationId, propertyId])
+  @@map("folios")
+}
+
+/// amount_minor = quantity * unit_amount_minor (checked in SQL). Positive = charge, negative = credit.
+model FolioItem {
+  id              String        @id @default(uuid()) @db.Uuid
+  organizationId  String        @map("organization_id") @db.Uuid
+  folioId         String        @map("folio_id") @db.Uuid
+  type            FolioItemType
+  description     String
+  serviceDate     DateTime?     @map("service_date") @db.Date
+  quantity        Int           @default(1)
+  unitAmountMinor Int           @map("unit_amount_minor")
+  amountMinor     Int           @map("amount_minor")
+  /// A TAX line points at the charge it was calculated on.
+  parentItemId    String?       @map("parent_item_id") @db.Uuid
+  taxId           String?       @map("tax_id") @db.Uuid
+  /// A REVERSAL line points at the line it cancels. Unique: a line can be reversed only once.
+  reversesItemId  String?       @unique @map("reverses_item_id") @db.Uuid
+  reason          String?
+  source          String        @default("FRONT_DESK")
+  idempotencyKey  String?       @map("idempotency_key")
+  createdById     String?       @map("created_by_id") @db.Uuid
+  createdAt       DateTime      @default(now()) @map("created_at") @db.Timestamptz
+
+  organization Organization @relation(fields: [organizationId], references: [id])
+  folio        Folio        @relation(fields: [folioId], references: [id])
+  parent       FolioItem?   @relation("ItemTax", fields: [parentItemId], references: [id])
+  taxLines     FolioItem[]  @relation("ItemTax")
+  reverses     FolioItem?   @relation("ItemReversal", fields: [reversesItemId], references: [id])
+  reversedBy   FolioItem?   @relation("ItemReversal")
+
+  @@unique([organizationId, idempotencyKey])
+  @@index([folioId])
+  @@index([organizationId])
+  @@map("folio_items")
+}
+
+model Payment {
+  id             String        @id @default(uuid()) @db.Uuid
+  organizationId String        @map("organization_id") @db.Uuid
+  folioId        String        @map("folio_id") @db.Uuid
+  amountMinor    Int           @map("amount_minor")
+  method         PaymentMethod
+  reference      String?
+  note           String?
+  idempotencyKey String?       @map("idempotency_key")
+  receivedById   String?       @map("received_by_id") @db.Uuid
+  createdAt      DateTime      @default(now()) @map("created_at") @db.Timestamptz
+
+  organization Organization @relation(fields: [organizationId], references: [id])
+  folio        Folio        @relation(fields: [folioId], references: [id])
+  refunds      Refund[]
+
+  @@unique([organizationId, idempotencyKey])
+  @@index([folioId])
+  @@index([organizationId])
+  @@map("payments")
+}
+
+model Refund {
+  id             String   @id @default(uuid()) @db.Uuid
+  organizationId String   @map("organization_id") @db.Uuid
+  paymentId      String   @map("payment_id") @db.Uuid
+  amountMinor    Int      @map("amount_minor")
+  reason         String
+  idempotencyKey String?  @map("idempotency_key")
+  createdById    String?  @map("created_by_id") @db.Uuid
+  createdAt      DateTime @default(now()) @map("created_at") @db.Timestamptz
+
+  organization Organization @relation(fields: [organizationId], references: [id])
+  payment      Payment      @relation(fields: [paymentId], references: [id])
+
+  @@unique([organizationId, idempotencyKey])
+  @@index([paymentId])
+  @@index([organizationId])
+  @@map("refunds")
 }

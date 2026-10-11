@@ -53,6 +53,11 @@ beforeAll(async () => {
 
 afterAll(async () => {
   await owner.auditLog.deleteMany({ where: { organizationId: { in: [orgA, orgB] } } });
+  const orgs = { organizationId: { in: [orgA, orgB] } };
+  await owner.refund.deleteMany({ where: orgs });
+  await owner.payment.deleteMany({ where: orgs });
+  await owner.folioItem.deleteMany({ where: orgs });
+  await owner.folio.deleteMany({ where: orgs });
   await owner.reservation.deleteMany({ where: { organizationId: { in: [orgA, orgB] } } });
   await owner.guest.deleteMany({ where: { organizationId: { in: [orgA, orgB] } } });
   await owner.room.deleteMany({ where: { organizationId: { in: [orgA, orgB] } } });
@@ -138,6 +143,69 @@ describe('tenant isolation (Row-Level Security)', () => {
 
     it('rejects a stay whose departure is not after arrival', async () => {
       await expect(book('RA7', '2027-01-05', '2027-01-05')).rejects.toThrow();
+    });
+  });
+
+  describe('money ledger', () => {
+    let folioId = '';
+    let itemId = '';
+    let paymentId = '';
+    let resId = '';
+
+    beforeAll(async () => {
+      resId = (await owner.reservation.create({ data: stay(orgA, propA, guestA, typeA, null, 'RF1', '2028-01-01', '2028-01-03') })).id;
+      folioId = (await owner.folio.create({ data: { organizationId: orgA, propertyId: propA, reservationId: resId, currency: 'PHP' } })).id;
+      itemId = (await owner.folioItem.create({ data: { organizationId: orgA, folioId, type: 'ROOM_CHARGE', description: 'Room', quantity: 1, unitAmountMinor: 100000, amountMinor: 100000 } })).id;
+      paymentId = (await owner.payment.create({ data: { organizationId: orgA, folioId, amountMinor: 50000, method: 'CASH' } })).id;
+    });
+
+    it('is isolated per organization', async () => {
+      expect(await asTenant(orgB, (tx) => tx.folio.count({ where: { id: folioId } }))).toBe(0);
+      expect(await asTenant(orgB, (tx) => tx.payment.count({ where: { id: paymentId } }))).toBe(0);
+      expect(await asTenant(orgA, (tx) => tx.folioItem.count({ where: { id: itemId } }))).toBe(1);
+    });
+
+    it('the application can ADD ledger lines but can never change or delete them', async () => {
+      await expect(asTenant(orgA, (tx) => tx.folioItem.updateMany({ where: { id: itemId }, data: { amountMinor: 1, unitAmountMinor: 1 } }))).rejects.toThrow();
+      await expect(asTenant(orgA, (tx) => tx.folioItem.deleteMany({ where: { id: itemId } }))).rejects.toThrow();
+      await expect(asTenant(orgA, (tx) => tx.payment.updateMany({ where: { id: paymentId }, data: { amountMinor: 1 } }))).rejects.toThrow();
+      await expect(asTenant(orgA, (tx) => tx.payment.deleteMany({ where: { id: paymentId } }))).rejects.toThrow();
+      const added = await asTenant(orgA, (tx) => tx.folioItem.create({ data: { organizationId: orgA, folioId, type: 'EXTRA_CHARGE', description: 'Laundry', quantity: 2, unitAmountMinor: 500, amountMinor: 1000 }, select: { id: true } }));
+      expect(added.id).toBeTruthy();
+    });
+
+    it('refunds are append-only too, and a folio can never be deleted', async () => {
+      const refund = await asTenant(orgA, (tx) => tx.refund.create({ data: { organizationId: orgA, paymentId, amountMinor: 1000, reason: 'test' }, select: { id: true } }));
+      await expect(asTenant(orgA, (tx) => tx.refund.updateMany({ where: { id: refund.id }, data: { amountMinor: 1 } }))).rejects.toThrow();
+      await expect(asTenant(orgA, (tx) => tx.refund.deleteMany({ where: { id: refund.id } }))).rejects.toThrow();
+      await expect(asTenant(orgA, (tx) => tx.folio.deleteMany({ where: { id: folioId } }))).rejects.toThrow();
+    });
+
+    it('a line must equal quantity x unit price', async () => {
+      await expect(owner.folioItem.create({ data: { organizationId: orgA, folioId, type: 'EXTRA_CHARGE', description: 'Bad maths', quantity: 3, unitAmountMinor: 100, amountMinor: 999 } })).rejects.toThrow();
+    });
+
+    it('payments and refunds must be above zero', async () => {
+      await expect(owner.payment.create({ data: { organizationId: orgA, folioId, amountMinor: 0, method: 'CASH' } })).rejects.toThrow();
+      await expect(owner.payment.create({ data: { organizationId: orgA, folioId, amountMinor: -500, method: 'CASH' } })).rejects.toThrow();
+      await expect(owner.refund.create({ data: { organizationId: orgA, paymentId, amountMinor: 0, reason: 'zero' } })).rejects.toThrow();
+    });
+
+    it('a line can be reversed only once', async () => {
+      const target = await owner.folioItem.create({ data: { organizationId: orgA, folioId, type: 'EXTRA_CHARGE', description: 'Spa', quantity: 1, unitAmountMinor: 800, amountMinor: 800 } });
+      const reverse = () => owner.folioItem.create({ data: { organizationId: orgA, folioId, type: 'REVERSAL', description: 'VOID: Spa', quantity: 1, unitAmountMinor: -800, amountMinor: -800, reversesItemId: target.id } });
+      await expect(reverse()).resolves.toBeTruthy();
+      await expect(reverse()).rejects.toThrow();
+    });
+
+    it('one folio per reservation', async () => {
+      await expect(owner.folio.create({ data: { organizationId: orgA, propertyId: propA, reservationId: resId, currency: 'PHP' } })).rejects.toThrow();
+    });
+
+    it('an idempotency key can be used only once per organization', async () => {
+      const key = `idem-${suffix}`;
+      await owner.payment.create({ data: { organizationId: orgA, folioId, amountMinor: 100, method: 'CASH', idempotencyKey: key } });
+      await expect(owner.payment.create({ data: { organizationId: orgA, folioId, amountMinor: 100, method: 'CASH', idempotencyKey: key } })).rejects.toThrow();
     });
   });
 

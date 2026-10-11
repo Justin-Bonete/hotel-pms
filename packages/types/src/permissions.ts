@@ -30,6 +30,13 @@ export const PERMISSION_CATALOG = [
   { key: 'reservation.check_in', module: 'reservation', level: 'PROPERTY', description: 'Check guests in and out' },
   { key: 'rate.read', module: 'rate', level: 'PROPERTY', description: 'View rate plans' },
   { key: 'rate.manage', module: 'rate', level: 'PROPERTY', description: 'Create and edit rate plans' },
+  { key: 'folio.read', module: 'billing', level: 'PROPERTY', description: 'View guest folios, charges and payments' },
+  { key: 'folio.charge', module: 'billing', level: 'PROPERTY', description: 'Post extra charges to an in-house guest folio' },
+  { key: 'folio.adjust', module: 'billing', level: 'PROPERTY', description: 'Post discounts and adjustments; void charges' },
+  { key: 'folio.override_checkout', module: 'billing', level: 'PROPERTY', description: 'Check a guest out with a balance due or credit' },
+  { key: 'payment.take', module: 'billing', level: 'PROPERTY', description: 'Record payments and deposits' },
+  { key: 'payment.refund', module: 'billing', level: 'PROPERTY', description: 'Refund payments' },
+  { key: 'tax.manage', module: 'billing', level: 'PROPERTY', description: 'Configure property taxes and service charges' },
   { key: 'staff.read', module: 'staff', level: 'PROPERTY', description: 'View staff accounts' },
   { key: 'staff.manage', module: 'staff', level: 'PROPERTY', description: 'Create, edit, disable staff accounts' },
   { key: 'role.read', module: 'rbac', level: 'ORGANIZATION', description: 'View roles and permissions' },
@@ -81,8 +88,12 @@ const ROOM_ADMIN: readonly PermissionKey[] = ['room.read', 'room.manage', 'room.
 const RESERVATION_ADMIN: readonly PermissionKey[] = [
   'guest.read', 'guest.manage', 'reservation.read', 'reservation.manage', 'reservation.check_in', 'rate.read', 'rate.manage',
 ];
+const BILLING_ADMIN: readonly PermissionKey[] = [
+  'folio.read', 'folio.charge', 'folio.adjust', 'folio.override_checkout', 'payment.take', 'payment.refund', 'tax.manage',
+];
 const FRONT_DESK_PERMISSIONS: readonly PermissionKey[] = [
   ...ROOM_OPERATIONS, 'guest.read', 'guest.manage', 'reservation.read', 'reservation.manage', 'reservation.check_in', 'rate.read',
+  'folio.read', 'folio.charge', 'payment.take',
 ];
 
 // Operational roles only receive real permissions in the phase that introduces their module.
@@ -95,21 +106,21 @@ export const SYSTEM_ROLE_TEMPLATES: readonly SystemRoleTemplate[] = [
     description: 'Manages properties and staff',
     permissions: [
       'organization.read', 'property_group.read', 'property.read', 'property.update',
-      'staff.read', 'staff.manage', 'role.read', 'role.assign', 'audit.read', ...ROOM_ADMIN, ...RESERVATION_ADMIN,
+      'staff.read', 'staff.manage', 'role.read', 'role.assign', 'audit.read', ...ROOM_ADMIN, ...RESERVATION_ADMIN, ...BILLING_ADMIN,
     ],
   },
   {
     key: 'PROPERTY_MANAGER',
     name: 'Property Manager',
     description: 'Manages assigned properties',
-    permissions: ['property.read', 'property.update', 'staff.read', 'role.read', ...ROOM_ADMIN, ...RESERVATION_ADMIN],
+    permissions: ['property.read', 'property.update', 'staff.read', 'role.read', ...ROOM_ADMIN, ...RESERVATION_ADMIN, ...BILLING_ADMIN],
   },
   operational('FRONT_DESK', 'Front Desk', FRONT_DESK_PERMISSIONS),
   operational('RECEPTIONIST', 'Receptionist', FRONT_DESK_PERMISSIONS),
   operational('HOUSEKEEPING_SUPERVISOR', 'Housekeeping Supervisor', ROOM_OPERATIONS),
   operational('HOUSEKEEPER', 'Housekeeper', ROOM_OPERATIONS),
   operational('MAINTENANCE', 'Maintenance', ROOM_OPERATIONS),
-  operational('CASHIER', 'Cashier'),
-  operational('ACCOUNTANT', 'Accountant', ['property.read', 'reservation.read', 'guest.read', 'rate.read']),
+  operational('CASHIER', 'Cashier', ['property.read', 'reservation.read', 'folio.read', 'payment.take']),
+  operational('ACCOUNTANT', 'Accountant', ['property.read', 'reservation.read', 'guest.read', 'rate.read', 'folio.read']),
   operational('INVENTORY_MANAGER', 'Inventory Manager'),
 ];

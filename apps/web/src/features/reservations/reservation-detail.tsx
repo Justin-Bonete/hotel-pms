@@ -9,7 +9,8 @@ import { Alert, Badge, Button, Spinner, TextareaField } from '@/components/ui/ui
 import { useAccess } from '@/features/access/access-context';
 import { useRooms } from '@/features/rooms/queries';
 import { STATUS_META } from '@/features/rooms/status';
-import { api } from '@/lib/api';
+import { FolioPanel } from '@/features/billing/folio-panel';
+import { ApiError, api } from '@/lib/api';
 import { useRefreshReservations, useReservation } from './queries';
 import { RESERVATION_META, SOURCE_LABELS, shortDate } from './status';
 
@@ -34,7 +35,7 @@ function Body({ r, onEdit }: { r: ReservationView; onEdit: (r: ReservationView) 
   const [cancelling, setCancelling] = useState(false);
 
   const act = useMutation({
-    mutationFn: (v: { action: ReservationAction; roomId?: string; reason?: string }) => api.post(`/reservations/${r.id}/transition`, v),
+    mutationFn: (v: { action: ReservationAction; roomId?: string; reason?: string; overrideBalance?: boolean }) => api.post(`/reservations/${r.id}/transition`, v),
     onSuccess: async () => {
       setCancelling(false);
       setReason('');
@@ -55,7 +56,7 @@ function Body({ r, onEdit }: { r: ReservationView; onEdit: (r: ReservationView) 
         .sort((a, b) => a.number.localeCompare(b.number, undefined, { numeric: true })),
     [rooms.data, r.roomTypeId, r.status],
   );
-  const run = (action: ReservationAction, extra: { roomId?: string; reason?: string } = {}) => act.mutate({ action, ...extra });
+  const run = (action: ReservationAction, extra: { roomId?: string; reason?: string; overrideBalance?: boolean } = {}) => act.mutate({ action, ...extra });
 
   const status = RESERVATION_META[r.status];
   const open = ['INQUIRY', 'PENDING', 'CONFIRMED'].includes(r.status);
@@ -82,8 +83,14 @@ function Body({ r, onEdit }: { r: ReservationView; onEdit: (r: ReservationView) 
       {r.notes && <Item label="Internal notes" value={r.notes} />}
       {r.cancelReason && <Item label="Cancellation reason" value={r.cancelReason} />}
 
-      <Alert tone="info">Folio, extra charges and payments arrive in Phase 3b. The amount above is the room charge only.</Alert>
+      {r.status !== 'INQUIRY' && <FolioPanel reservation={r} />}
       {act.error && <Alert tone="error">{act.error.message}</Alert>}
+      {act.error instanceof ApiError && ['BALANCE_DUE', 'CREDIT_REMAINING'].includes(act.error.code) && can('folio.override_checkout', r.propertyId) && (
+        <div className="flex items-center justify-between gap-3 rounded-lg bg-amber-50 p-3 text-amber-900">
+          <span>Manager override: check out anyway and keep the {act.error.code === 'BALANCE_DUE' ? 'balance as owed' : 'credit on file'}. This is recorded in the audit log.</span>
+          <Button variant="danger" loading={act.isPending} onClick={() => run('check_out', { overrideBalance: true })}>Check out anyway</Button>
+        </div>
+      )}
 
       {(holding || r.status === 'CHECKED_IN') && frontDesk && (
         <div className="space-y-2 rounded-lg bg-slate-50 p-3">

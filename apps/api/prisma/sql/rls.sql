@@ -24,7 +24,8 @@ BEGIN
   FOREACH t IN ARRAY ARRAY[
     'property_groups','properties','departments','buildings','floors',
     'users','user_sessions','auth_tokens','user_role_assignments','audit_logs',
-    'room_types','rooms','guests','rate_plans','rate_plan_rates','reservations'
+    'room_types','rooms','guests','rate_plans','rate_plan_rates','reservations',
+    'taxes','folios','folio_items','payments','refunds'
   ] LOOP
     EXECUTE format('ALTER TABLE %I ENABLE ROW LEVEL SECURITY', t);
     EXECUTE format('DROP POLICY IF EXISTS tenant_isolation ON %I', t);
@@ -74,6 +75,18 @@ BEGIN
   IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'reservations_guests_check') THEN
     ALTER TABLE reservations ADD CONSTRAINT reservations_guests_check CHECK (adults >= 1 AND children >= 0 AND total_minor >= 0);
   END IF;
+  IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'folio_items_amount_check') THEN
+    ALTER TABLE folio_items ADD CONSTRAINT folio_items_amount_check CHECK (quantity >= 1 AND amount_minor = quantity * unit_amount_minor);
+  END IF;
+  IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'payments_amount_check') THEN
+    ALTER TABLE payments ADD CONSTRAINT payments_amount_check CHECK (amount_minor > 0);
+  END IF;
+  IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'refunds_amount_check') THEN
+    ALTER TABLE refunds ADD CONSTRAINT refunds_amount_check CHECK (amount_minor > 0);
+  END IF;
+  IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'taxes_rate_check') THEN
+    ALTER TABLE taxes ADD CONSTRAINT taxes_rate_check CHECK (rate_bps BETWEEN 0 AND 10000);
+  END IF;
   IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'rate_plan_rates_nonnegative_check') THEN
     ALTER TABLE rate_plan_rates ADD CONSTRAINT rate_plan_rates_nonnegative_check CHECK (nightly_rate_minor >= 0 AND (weekend_rate_minor IS NULL OR weekend_rate_minor >= 0));
   END IF;
@@ -83,8 +96,15 @@ END $$;
 GRANT SELECT, INSERT, UPDATE, DELETE ON
   organizations, property_groups, properties, departments, buildings, floors,
   users, user_sessions, auth_tokens, roles, role_permissions, user_role_assignments,
-  room_types, rooms, guests, rate_plans, rate_plan_rates, reservations
+  room_types, rooms, guests, rate_plans, rate_plan_rates, reservations, taxes
 TO pms_app;
+
+-- Folios may be opened and closed (UPDATE) but never deleted.
+GRANT SELECT, INSERT, UPDATE ON folios TO pms_app;
+
+-- The money ledger is APPEND-ONLY for the application: insert and read, never change or remove.
+GRANT SELECT, INSERT ON folio_items, payments, refunds TO pms_app;
+REVOKE UPDATE, DELETE, TRUNCATE ON folio_items, payments, refunds FROM pms_app;
 
 -- Permissions are code-defined and seeded by the owner role only.
 GRANT SELECT ON permissions TO pms_app;

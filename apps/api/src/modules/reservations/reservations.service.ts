@@ -6,6 +6,7 @@ import {
   ACTION_RESULT,
   EDITABLE_STATUSES,
   HOLDING_STATUSES,
+  formatMoney,
   nightsBetween,
   parseDate,
   quoteStay,
@@ -20,11 +21,14 @@ import type { CreateReservationInput, RangeQuery, ReservationsQuery, TransitionI
 import type { AccessContext } from '../../common/access/access-context';
 import { assertCan } from '../../common/access/assert-access';
 import { changedFields } from '../../common/audit/changed-fields';
+import { HttpStatus } from '@nestjs/common';
+import { AppException } from '../../common/http/app-exception';
 import { badRequest, conflict, notFound } from '../../common/http/errors';
 import { Paginated } from '../../common/http/response.interceptor';
 import { emptyToNull } from '../../common/text/text';
 import { PrismaService, Tx } from '../../database/prisma/prisma.service';
 import { AuditService } from '../audit/audit.service';
+import { FolioLedger } from '../folios/folio-ledger.service';
 import { canBook, nightlyAvailability } from './availability';
 import { reservationDetailInclude, reservationInclude, toReservationView } from './reservation.mapper';
 
@@ -37,6 +41,7 @@ export class ReservationsService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly audit: AuditService,
+    private readonly ledger: FolioLedger,
   ) {}
 
   // ================================================================ reads
@@ -204,6 +209,7 @@ export class ReservationsService {
           children: dto.children,
           nights: quote.nights,
           totalMinor: quote.totalMinor,
+          nightlyRates: quote.perNight.map((n) => n.rateMinor),
           currency: property.currency,
           specialRequests: emptyToNull(dto.specialRequests) ?? null,
           notes: emptyToNull(dto.notes) ?? null,
@@ -263,6 +269,7 @@ export class ReservationsService {
           ratePlanId: plan.id,
           nights: quote.nights,
           totalMinor: quote.totalMinor,
+          nightlyRates: quote.perNight.map((n) => n.rateMinor),
           ...(dto.specialRequests !== undefined ? { specialRequests: emptyToNull(dto.specialRequests) } : {}),
           ...(dto.notes !== undefined ? { notes: emptyToNull(dto.notes) } : {}),
         },
@@ -295,6 +302,9 @@ export class ReservationsService {
       const departure = toDateString(r.departureDate);
       const data: Prisma.ReservationUncheckedUpdateInput = {};
       let roomToDirty: { id: string; number: string } | null = null;
+      let checkInRoomNumber = r.room?.number ?? '';
+      let folioToClose: string | null = null;
+      let overriddenBalance: number | null = null;
 
       switch (dto.action) {
         case 'confirm':
@@ -336,13 +346,33 @@ export class ReservationsService {
           this.assertRoomReady(room);
           data.roomId = room.id;
           data.checkedInAt = now;
+          checkInRoomNumber = room.number;
           break;
         }
 
-        case 'check_out':
+        case 'check_out': {
+          // Bill any nights not yet posted (stays checked in before billing existed), then require a settled folio.
+          const stay = this.stayForBilling(r, r.room?.number ?? '');
+          const folio = await this.ledger.ensureFolio(tx, stay);
+          await this.ledger.postRoomCharges(tx, stay, access.userId);
+          const { balanceMinor } = await this.ledger.balance(tx, folio.id);
+          if (balanceMinor !== 0) {
+            if (dto.overrideBalance) {
+              if (!access.can('folio.override_checkout', r.propertyId)) {
+                throw new AppException('FORBIDDEN', 'Only a manager can check a guest out with an unsettled balance.', HttpStatus.FORBIDDEN);
+              }
+              overriddenBalance = balanceMinor;
+            } else if (balanceMinor > 0) {
+              throw conflict('BALANCE_DUE', `${formatMoney(balanceMinor, r.currency)} is still owed. Record the payment before checking out.`);
+            } else {
+              throw conflict('CREDIT_REMAINING', `The guest is in credit by ${formatMoney(-balanceMinor, r.currency)}. Refund it before checking out.`);
+            }
+          }
+          folioToClose = folio.id;
           data.checkedOutAt = now;
           if (r.roomId) roomToDirty = { id: r.roomId, number: r.room?.number ?? '' };
           break;
+        }
       }
 
       const result = ACTION_RESULT[dto.action];
@@ -351,6 +381,11 @@ export class ReservationsService {
       // Compare-and-set: refuse instead of overwriting if someone else just changed this reservation.
       const updated = await tx.reservation.updateMany({ where: { id, status: r.status }, data });
       if (updated.count === 0) throw conflict('RESERVATION_CHANGED', 'Someone else just changed this reservation. Refresh and try again.');
+
+      if (dto.action === 'check_in') {
+        await this.ledger.postRoomCharges(tx, this.stayForBilling(r, checkInRoomNumber), access.userId);
+      }
+      if (folioToClose) await this.ledger.close(tx, folioToClose);
 
       if (roomToDirty) {
         const changed = await tx.room.updateMany({
@@ -379,7 +414,11 @@ export class ReservationsService {
         entity: 'reservation',
         entityId: id,
         before: { code: r.code, status: r.status, room: r.room?.number ?? null },
-        after: { status: result ?? r.status, reason: emptyToNull(dto.reason) ?? null },
+        after: {
+          status: result ?? r.status,
+          reason: emptyToNull(dto.reason) ?? null,
+          ...(overriddenBalance !== null ? { checkedOutWithBalance: formatMoney(overriddenBalance, r.currency) } : {}),
+        },
       });
 
       const fresh = await tx.reservation.findFirstOrThrow({ where: { id }, include: reservationInclude });
@@ -388,6 +427,24 @@ export class ReservationsService {
   }
 
   // ================================================================ internals
+  private stayForBilling(
+    r: { id: string; organizationId: string; propertyId: string; currency: string; arrivalDate: Date; departureDate: Date; totalMinor: number; nightlyRates: unknown; roomType: { name: string } },
+    roomNumber: string,
+  ) {
+    return {
+      id: r.id,
+      organizationId: r.organizationId,
+      propertyId: r.propertyId,
+      currency: r.currency,
+      arrivalDate: r.arrivalDate,
+      departureDate: r.departureDate,
+      totalMinor: r.totalMinor,
+      nightlyRates: r.nightlyRates,
+      roomNumber,
+      roomTypeName: r.roomType.name,
+    };
+  }
+
   private async requireProperty(tx: Tx, propertyId: string) {
     const property = await tx.property.findFirst({ where: { id: propertyId, deletedAt: null }, select: { id: true, name: true, timezone: true, currency: true } });
     if (!property) throw notFound('Property');

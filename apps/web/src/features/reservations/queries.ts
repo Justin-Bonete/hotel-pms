@@ -48,6 +48,6 @@ export function useRefreshReservations() {
   const queryClient = useQueryClient();
   return () =>
     Promise.all(
-      ['reservations', 'reservation', 'calendar', 'availability', 'rooms', 'guests', 'guest'].map((key) => queryClient.invalidateQueries({ queryKey: [key] })),
+      ['reservations', 'reservation', 'calendar', 'availability', 'rooms', 'guests', 'guest', 'folio'].map((key) => queryClient.invalidateQueries({ queryKey: [key] })),
     );
 }

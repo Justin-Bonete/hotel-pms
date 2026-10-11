@@ -7,3 +7,12 @@ body {
   @apply bg-slate-50 text-slate-900 antialiased;
   font-family: ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
 }
+
+/* Printing a folio / receipt: show only the folio, un-clipped, using the browser's print dialog (or save as PDF). */
+@media print {
+  body * { visibility: hidden; }
+  .print-area, .print-area * { visibility: visible; }
+  [role='dialog'] { position: absolute !important; inset: 0 !important; display: block !important; }
+  [role='dialog'] > div:last-child { max-height: none !important; overflow: visible !important; box-shadow: none !important; }
+  .no-print { display: none !important; }
+}

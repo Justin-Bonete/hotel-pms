@@ -113,3 +113,29 @@ Rules enforced by the API (and, for double-booking, by PostgreSQL itself):
 - A room can never hold two active stays that overlap (exclusion constraint), even if application code is bypassed.
 - Check-in needs a clean room (Available or Inspected); check-out marks the room Dirty so housekeeping sees it at once.
 - Housekeeping, maintenance and cashier roles cannot see guests, reservations or rates.
+
+## Billing: folios, taxes, payments, refunds (Phase 3b)
+
+```bash
+pnpm install
+pnpm build:packages
+pnpm db:migrate     # name it: phase3b_billing
+pnpm db:rls         # adds the billing tables to row-level security and makes the money ledger APPEND-ONLY
+pnpm db:seed        # demo taxes (VAT, service charge), folios for in-house/past stays, deposits
+pnpm test && pnpm test:int
+```
+
+If `db:migrate` says "Drift detected", run `pnpm db:reset` (development database only).
+
+How money works (the rules the code enforces):
+- Amounts are whole centavos, never decimals. Taxes are percentages in basis points (1200 = 12%), rounded half-up per line.
+- **Append-only ledger.** The application can add folio lines, payments and refunds but the database role it uses cannot
+  update or delete them. A mistake is fixed by a reversing line (a "void"), and a line can be voided only once.
+- Room nights (and their taxes) are posted automatically at check-in at the price quoted at booking. Extras are posted by
+  front desk while the guest is in-house. Discounts/adjustments and voids need `folio.adjust` (managers).
+- **Check-out requires a settled folio.** Only a manager with `folio.override_checkout` can check a guest out with a
+  balance due or a credit; the override is written to the audit log with the amount.
+- Payments and refunds accept an `Idempotency-Key` header: replaying the same request never posts twice.
+  Refunds can never exceed what was paid (and concurrent refunds take turns).
+- Tax and rate changes apply to future charges only; existing folios are never rewritten. Prices are tax-exclusive.
+- Folios print through the browser (Print button; choose "Save as PDF" for a receipt).

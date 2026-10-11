@@ -10,8 +10,9 @@
  *
  * Only real Phase 1 data is created. No reservations, revenue, etc.
  */
-import { PrismaClient, PropertyType, ReservationSource, ReservationStatus, RoomStatus, ScopeType, UserStatus } from '@prisma/client';
-import { PERMISSION_CATALOG, SYSTEM_ROLE_TEMPLATES, addDays, nightsBetween, quoteStay, todayIn } from '@pms/types';
+import { Prisma, PrismaClient, PropertyType, ReservationSource, ReservationStatus, RoomStatus, ScopeType, UserStatus } from '@prisma/client';
+import { PERMISSION_CATALOG, SYSTEM_ROLE_TEMPLATES, addDays, calcTaxMinor, eachNight, formatRate, nightlyRatesFrom, nightsBetween, parseDate, quoteStay, toDateString, todayIn } from '@pms/types';
+import { randomUUID } from 'node:crypto';
 import * as argon2 from 'argon2';
 
 const prisma = new PrismaClient();
@@ -233,6 +234,83 @@ async function seedReservations(organizationId: string, propertyId: string, slug
   }
 }
 
+// ---------------------------------------------------------------- demo taxes, folios, deposits
+const DEMO_TAXES: Record<string, Array<{ name: string; rateBps: number; room: boolean; extras: boolean }>> = {
+  'manila-grand': [{ name: 'VAT', rateBps: 1200, room: true, extras: true }, { name: 'Service charge', rateBps: 1000, room: true, extras: false }],
+  'baguio-lodge': [{ name: 'VAT', rateBps: 1200, room: true, extras: true }],
+  'la-union-resort': [{ name: 'VAT', rateBps: 1200, room: true, extras: true }, { name: 'Service charge', rateBps: 1000, room: true, extras: true }],
+};
+
+async function seedTaxes(organizationId: string, propertyId: string, slug: string) {
+  for (const t of DEMO_TAXES[slug] ?? []) {
+    const existing = await prisma.tax.findFirst({ where: { propertyId, name: t.name, deletedAt: null } });
+    if (!existing) await prisma.tax.create({ data: { organizationId, propertyId, name: t.name, rateBps: t.rateBps, appliesToRoom: t.room, appliesToExtras: t.extras } });
+  }
+}
+
+/** In-house and past stays get a folio with room charges + taxes; past stays are paid in full and closed. */
+async function seedFolios(organizationId: string, propertyId: string, currency: string) {
+  const taxes = await prisma.tax.findMany({ where: { propertyId, isActive: true, deletedAt: null } });
+  const stays = await prisma.reservation.findMany({
+    where: { propertyId, status: { in: ['CHECKED_IN', 'CHECKED_OUT'] }, folio: null },
+    include: { room: true, roomType: true },
+    orderBy: { arrivalDate: 'asc' },
+  });
+  let firstInHouse = true;
+  for (const r of stays) {
+    const closed = r.status === 'CHECKED_OUT';
+    const folio = await prisma.folio.create({
+      data: { organizationId, propertyId, reservationId: r.id, currency, status: closed ? 'CLOSED' : 'OPEN', roomChargesPostedAt: r.checkedInAt ?? new Date(), closedAt: closed ? r.checkedOutAt : null },
+    });
+    const nights = eachNight(toDateString(r.arrivalDate), toDateString(r.departureDate));
+    const rates = nightlyRatesFrom(r.nightlyRates, nights.length, r.totalMinor);
+    const rows: Prisma.FolioItemCreateManyInput[] = [];
+    let total = 0;
+    const push = (row: Prisma.FolioItemCreateManyInput) => { rows.push(row); total += row.amountMinor; };
+
+    nights.forEach((night, i) => {
+      const amount = rates[i] ?? 0;
+      const id = randomUUID();
+      push({ id, organizationId, folioId: folio.id, type: 'ROOM_CHARGE', description: `Room ${r.room?.number ?? ''} · ${r.roomType.name}`, serviceDate: parseDate(night), quantity: 1, unitAmountMinor: amount, amountMinor: amount, source: 'SYSTEM' });
+      for (const t of taxes.filter((x) => x.appliesToRoom)) {
+        const tax = calcTaxMinor(amount, t.rateBps);
+        if (tax > 0) push({ id: randomUUID(), organizationId, folioId: folio.id, type: 'TAX', description: `${t.name} (${formatRate(t.rateBps)})`, serviceDate: parseDate(night), quantity: 1, unitAmountMinor: tax, amountMinor: tax, parentItemId: id, taxId: t.id, source: 'SYSTEM' });
+      }
+    });
+
+    if (!closed && firstInHouse) {
+      firstInHouse = false;
+      const id = randomUUID();
+      push({ id, organizationId, folioId: folio.id, type: 'EXTRA_CHARGE', description: 'Minibar', quantity: 1, unitAmountMinor: 45000, amountMinor: 45000, source: 'FRONT_DESK' });
+      for (const t of taxes.filter((x) => x.appliesToExtras)) {
+        const tax = calcTaxMinor(45000, t.rateBps);
+        if (tax > 0) push({ id: randomUUID(), organizationId, folioId: folio.id, type: 'TAX', description: `${t.name} (${formatRate(t.rateBps)})`, quantity: 1, unitAmountMinor: tax, amountMinor: tax, parentItemId: id, taxId: t.id, source: 'SYSTEM' });
+      }
+    }
+    await prisma.folioItem.createMany({ data: rows });
+
+    if (closed) {
+      const deposit = Math.floor(total * 0.3);
+      await prisma.payment.create({ data: { organizationId, folioId: folio.id, amountMinor: deposit, method: 'CASH', reference: 'Deposit' } });
+      await prisma.payment.create({ data: { organizationId, folioId: folio.id, amountMinor: total - deposit, method: 'CARD', reference: 'Settlement at check-out' } });
+    } else {
+      await prisma.payment.create({ data: { organizationId, folioId: folio.id, amountMinor: Math.floor(total / 2), method: 'CARD', reference: 'Deposit at check-in' } });
+    }
+  }
+}
+
+/** Every other upcoming confirmed booking has paid a one-night deposit. */
+async function seedDeposits(organizationId: string, propertyId: string, currency: string) {
+  const upcoming = await prisma.reservation.findMany({ where: { propertyId, status: 'CONFIRMED', folio: null }, orderBy: { arrivalDate: 'asc' } });
+  for (const [i, r] of upcoming.entries()) {
+    if (i % 2 !== 0) continue;
+    const firstNight = nightlyRatesFrom(r.nightlyRates, r.nights, r.totalMinor)[0] ?? 0;
+    if (firstNight <= 0) continue;
+    const folio = await prisma.folio.create({ data: { organizationId, propertyId, reservationId: r.id, currency } });
+    await prisma.payment.create({ data: { organizationId, folioId: folio.id, amountMinor: firstNight, method: 'BANK_TRANSFER', reference: 'Booking deposit' } });
+  }
+}
+
 async function seedPermissionsAndRoles() {
   for (const p of PERMISSIONS) {
     await prisma.permission.upsert({ where: { key: p.key }, update: p, create: p });
@@ -288,6 +366,9 @@ async function seedDemoOrganization() {
     });
     await seedRooms(org.id, property.id, p.slug);
     await seedReservations(org.id, property.id, p.slug, property.currency, property.timezone);
+    await seedTaxes(org.id, property.id, p.slug);
+    await seedFolios(org.id, property.id, property.currency);
+    await seedDeposits(org.id, property.id, property.currency);
     for (const name of DEPARTMENTS) {
       await prisma.department.upsert({
         where: { propertyId_name: { propertyId: property.id, name } },

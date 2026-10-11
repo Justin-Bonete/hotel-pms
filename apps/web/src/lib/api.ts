@@ -32,10 +32,11 @@ interface RequestOptions {
   body?: unknown;
   /** false = do not attach the access token and do not try to refresh on 401. */
   auth?: boolean;
+  headers?: Record<string, string>;
 }
 
 async function send<T>(path: string, opts: RequestOptions = {}, isRetry = false): Promise<Envelope<T>> {
-  const headers: Record<string, string> = {};
+  const headers: Record<string, string> = { ...opts.headers };
   if (opts.body !== undefined) headers['Content-Type'] = 'application/json';
   const token = tokenStore.get();
   if (opts.auth !== false && token) headers.Authorization = `Bearer ${token}`;
@@ -92,8 +93,8 @@ export function resetRefresh(): void {
 
 export const api = {
   get: async <T>(path: string): Promise<T> => (await send<T>(path)).data,
-  post: async <T>(path: string, body?: unknown, auth = true): Promise<T> =>
-    (await send<T>(path, { method: 'POST', body: body ?? undefined, auth })).data,
+  post: async <T>(path: string, body?: unknown, auth = true, headers?: Record<string, string>): Promise<T> =>
+    (await send<T>(path, { method: 'POST', body: body ?? undefined, auth, headers })).data,
   patch: async <T>(path: string, body: unknown): Promise<T> => (await send<T>(path, { method: 'PATCH', body })).data,
   delete: async <T>(path: string): Promise<T> => (await send<T>(path, { method: 'DELETE' })).data,
   page: <T>(path: string): Promise<Envelope<T[]>> => send<T[]>(path),

@@ -8,6 +8,7 @@ import { RoomTypesPanel } from '@/features/rooms/room-types-panel';
 import { RoomsTable } from '@/features/rooms/rooms-table';
 import { StructurePanel } from '@/features/rooms/structure-panel';
 import { RatesPanel } from '@/features/rates/rates-panel';
+import { TaxesPanel } from '@/features/billing/taxes-panel';
 import { useAccess } from '@/features/access/access-context';
 import { cn } from '@/lib/utils';
 
@@ -16,6 +17,7 @@ const TABS = [
   { id: 'rooms', label: 'Rooms' },
   { id: 'types', label: 'Room types' },
   { id: 'rates', label: 'Rates' },
+  { id: 'taxes', label: 'Taxes' },
   { id: 'structure', label: 'Buildings & floors' },
 ] as const;
 type TabId = (typeof TABS)[number]['id'];
@@ -49,7 +51,7 @@ export default function RoomsPage() {
       </div>
 
       <div role="tablist" className="flex gap-1 overflow-x-auto border-b border-slate-200">
-        {TABS.filter((t) => t.id !== 'rates' || can('rate.read', selected.id)).map((t) => (
+        {TABS.filter((t) => (t.id !== 'rates' && t.id !== 'taxes') || can('rate.read', selected.id)).map((t) => (
           <button
             key={t.id}
             role="tab"
@@ -66,6 +68,7 @@ export default function RoomsPage() {
       {tab === 'rooms' && <RoomsTable propertyId={selected.id} />}
       {tab === 'types' && <RoomTypesPanel propertyId={selected.id} />}
       {tab === 'rates' && <RatesPanel propertyId={selected.id} />}
+      {tab === 'taxes' && <TaxesPanel propertyId={selected.id} />}
       {tab === 'structure' && <StructurePanel propertyId={selected.id} />}
     </div>
   );
