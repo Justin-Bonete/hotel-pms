@@ -1,7 +1,9 @@
 node_modules
 dist
 .next
+.next-prod
 .turbo
+apps/web/public/hotel-pms-landing.html
 .env
 .env.*
 !.env.example

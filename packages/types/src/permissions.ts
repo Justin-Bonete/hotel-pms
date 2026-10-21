@@ -83,7 +83,6 @@ const operational = (
   permissions,
 });
 
-const ROOM_OPERATIONS: readonly PermissionKey[] = ['property.read', 'room.read', 'room.update_status'];
 const ROOM_ADMIN: readonly PermissionKey[] = ['room.read', 'room.manage', 'room.update_status', 'room_type.manage'];
 const RESERVATION_ADMIN: readonly PermissionKey[] = [
   'guest.read', 'guest.manage', 'reservation.read', 'reservation.manage', 'reservation.check_in', 'rate.read', 'rate.manage',
@@ -92,7 +91,7 @@ const BILLING_ADMIN: readonly PermissionKey[] = [
   'folio.read', 'folio.charge', 'folio.adjust', 'folio.override_checkout', 'payment.take', 'payment.refund', 'tax.manage',
 ];
 const FRONT_DESK_PERMISSIONS: readonly PermissionKey[] = [
-  ...ROOM_OPERATIONS, 'guest.read', 'guest.manage', 'reservation.read', 'reservation.manage', 'reservation.check_in', 'rate.read',
+  'property.read', 'room.read', 'guest.read', 'guest.manage', 'reservation.read', 'reservation.manage', 'reservation.check_in', 'rate.read',
   'folio.read', 'folio.charge', 'payment.take',
 ];
 
@@ -111,16 +110,30 @@ export const SYSTEM_ROLE_TEMPLATES: readonly SystemRoleTemplate[] = [
   },
   {
     key: 'PROPERTY_MANAGER',
-    name: 'Property Manager',
-    description: 'Manages assigned properties',
-    permissions: ['property.read', 'property.update', 'staff.read', 'role.read', ...ROOM_ADMIN, ...RESERVATION_ADMIN, ...BILLING_ADMIN],
+    name: 'Branch Manager',
+    description: 'Manages an assigned property, including staff, rates, adjustments, and refunds',
+    permissions: ['property.read', 'property.update', 'staff.read', 'staff.manage', 'role.assign', ...ROOM_ADMIN, ...RESERVATION_ADMIN, ...BILLING_ADMIN],
   },
   operational('FRONT_DESK', 'Front Desk', FRONT_DESK_PERMISSIONS),
   operational('RECEPTIONIST', 'Receptionist', FRONT_DESK_PERMISSIONS),
-  operational('HOUSEKEEPING_SUPERVISOR', 'Housekeeping Supervisor', ROOM_OPERATIONS),
-  operational('HOUSEKEEPER', 'Housekeeper', ROOM_OPERATIONS),
-  operational('MAINTENANCE', 'Maintenance', ROOM_OPERATIONS),
+  operational(
+    'HOUSEKEEPING_SUPERVISOR',
+    'Housekeeping Supervisor',
+    ['property.read'],
+  ),
+  {
+    key: 'HOUSEKEEPER',
+    name: 'Housekeeper',
+    description: 'Room-level assignments are not available yet; room access is withheld until they are.',
+    permissions: ['property.read'],
+  },
+  {
+    key: 'MAINTENANCE',
+    name: 'Maintenance',
+    description: 'Repair requests are not available yet.',
+    permissions: ['property.read'],
+  },
   operational('CASHIER', 'Cashier', ['property.read', 'reservation.read', 'folio.read', 'payment.take']),
-  operational('ACCOUNTANT', 'Accountant', ['property.read', 'reservation.read', 'guest.read', 'rate.read', 'folio.read']),
+  operational('ACCOUNTANT', 'Accountant', ['property.read', 'folio.read']),
   operational('INVENTORY_MANAGER', 'Inventory Manager'),
 ];

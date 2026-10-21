@@ -4,10 +4,13 @@ import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { APP_NAME } from '@/lib/constants';
 import { cn } from '@/lib/utils';
+import { useAccess } from '@/features/access/access-context';
 import { NAV_ITEMS } from './nav-items';
 
 export function Sidebar({ onNavigate }: { onNavigate?: () => void }) {
   const pathname = usePathname();
+  const { can, isLoading } = useAccess();
+  const items = NAV_ITEMS.filter((item) => !item.permission || (!isLoading && can(item.permission)));
   return (
     <div className="flex h-full flex-col bg-slate-900 text-slate-300">
       <div className="flex h-16 shrink-0 items-center gap-2 px-5">
@@ -15,7 +18,7 @@ export function Sidebar({ onNavigate }: { onNavigate?: () => void }) {
         <span className="font-semibold text-white">{APP_NAME}</span>
       </div>
       <nav className="flex-1 space-y-0.5 overflow-y-auto px-3 pb-6" aria-label="Main">
-        {NAV_ITEMS.map(({ label, href, icon: Icon, ready }) => {
+        {items.map(({ label, href, icon: Icon, ready }) => {
           const active = pathname === href || pathname.startsWith(`${href}/`);
           return (
             <Link

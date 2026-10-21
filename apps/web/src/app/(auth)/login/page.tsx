@@ -23,7 +23,11 @@ export default function LoginPage() {
     setError(null);
     try {
       await login(values);
-      router.replace('/dashboard');
+      if (window.parent !== window) {
+        window.parent.postMessage({ type: 'pms:auth-success' }, window.location.origin);
+      } else {
+        router.replace('/dashboard');
+      }
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Could not sign in.');
     }

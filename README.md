@@ -64,6 +64,8 @@ pnpm dev:web      # terminal 2  -> http://localhost:3000
 ```
 
 Open **http://localhost:3000** (use `localhost`, not `127.0.0.1`, so the sign-in cookie is sent).
+The home page shows `hotel-pms-landing.html`; use its **Log in** button to open the hotel dashboard.
+Production builds use a separate `.next-prod` output directory so they do not overwrite a running dev server's `.next` cache.
 Demo login after `pnpm db:seed`: `owner@abc-hospitality.test` / the `SEED_OWNER_PASSWORD` from your `.env`.
 
 ## Permissions (step 5)
@@ -75,6 +77,13 @@ Demo login after `pnpm db:seed`: `owner@abc-hospitality.test` / the `SEED_OWNER_
 - Property switcher: send `X-Property-Id: <uuid>` (or `ALL`). The API verifies you may see that property.
 - Endpoints: `GET /rbac/me`, `GET /rbac/roles`, `GET /rbac/permissions`.
 - Tests: `pnpm test` (unit, no database) and `pnpm test:int` (tenant isolation against Docker Postgres).
+- Signup creates an organization and assigns its creator the Owner role. The login and refresh-cookie flow is already
+  connected to the web app; staff invitation and role-assignment screens are not implemented yet.
+- Branch Manager uses the existing `PROPERTY_MANAGER` system key for compatibility and should be assigned at the
+  branch's property scope. Front Desk, Cashier, and Accountant permissions are limited to existing modules.
+- Housekeeping room assignments, maintenance requests, approvals, daily close, invoices, and reports are not ready.
+  Housekeeping and maintenance roles therefore do not receive broad room or repair permissions before those scopes exist.
+- After changing system-role templates, run `pnpm db:seed` to refresh the permission assignments in the database.
 
 ## Rooms (Phase 2) and property management (step 6)
 

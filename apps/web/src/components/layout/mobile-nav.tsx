@@ -3,6 +3,7 @@
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { cn } from '@/lib/utils';
+import { useAccess } from '@/features/access/access-context';
 import { NAV_ITEMS } from './nav-items';
 
 const PINNED = ['/dashboard', '/properties', '/settings'];
@@ -10,7 +11,10 @@ const PINNED = ['/dashboard', '/properties', '/settings'];
 /** Phone layout: bottom bar with the working pages; everything else lives in the menu drawer. */
 export function MobileNav({ onMore }: { onMore: () => void }) {
   const pathname = usePathname();
-  const items = NAV_ITEMS.filter((i) => PINNED.includes(i.href));
+  const { can, isLoading } = useAccess();
+  const items = NAV_ITEMS.filter(
+    (item) => PINNED.includes(item.href) && (!item.permission || (!isLoading && can(item.permission))),
+  );
   return (
     <nav aria-label="Primary" className="fixed inset-x-0 bottom-0 z-30 flex border-t border-slate-200 bg-white pb-[env(safe-area-inset-bottom)] lg:hidden">
       {items.map(({ label, href, icon: Icon }) => (

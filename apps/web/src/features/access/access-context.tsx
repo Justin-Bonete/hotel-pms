@@ -7,6 +7,7 @@ import { api } from '@/lib/api';
 
 interface AccessValue {
   isLoading: boolean;
+  roles: AccessSummary['roles'];
   /** UI convenience only. The API enforces every rule again on the server. */
   can: (permission: PermissionKey, propertyId?: string) => boolean;
 }
@@ -26,7 +27,10 @@ export function AccessProvider({ children }: { children: ReactNode }) {
     [query.data],
   );
 
-  const value = useMemo(() => ({ isLoading: query.isLoading, can }), [query.isLoading, can]);
+  const value = useMemo(
+    () => ({ isLoading: query.isLoading, roles: query.data?.roles ?? [], can }),
+    [query.isLoading, query.data?.roles, can],
+  );
   return <AccessContext.Provider value={value}>{children}</AccessContext.Provider>;
 }
 

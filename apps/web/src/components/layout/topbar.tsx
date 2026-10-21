@@ -3,12 +3,15 @@
 import { Bell, HelpCircle, LogOut, Menu, Search } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { useState } from 'react';
+import { SYSTEM_ROLE_TEMPLATES } from '@pms/types';
+import { useAccess } from '@/features/access/access-context';
 import { useAuth } from '@/features/auth/auth-context';
 import { initials } from '@/lib/utils';
 import { PropertySelector } from './property-selector';
 
 export function Topbar({ onMenu }: { onMenu: () => void }) {
   const { user, logout } = useAuth();
+  const { roles } = useAccess();
   const router = useRouter();
   const [open, setOpen] = useState(false);
 
@@ -53,6 +56,9 @@ export function Topbar({ onMenu }: { onMenu: () => void }) {
                 <div className="border-b border-slate-100 px-4 pb-2">
                   <p className="text-sm font-medium text-slate-900">{user?.firstName} {user?.lastName}</p>
                   <p className="truncate text-xs text-slate-500">{user?.email}</p>
+                  <p className="truncate text-xs text-slate-500">
+                    {roles.map((role) => SYSTEM_ROLE_TEMPLATES.find((template) => template.key === role.key)?.name ?? role.key).join(', ')}
+                  </p>
                   <p className="truncate text-xs text-slate-500">{user?.organization.name}</p>
                 </div>
                 <button type="button" role="menuitem" onClick={signOut} className="flex w-full items-center gap-2 px-4 py-2 text-sm text-slate-700 hover:bg-slate-50">

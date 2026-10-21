@@ -23,14 +23,18 @@ export default function RegisterPage() {
     setError(null);
     try {
       await signUp(values);
-      router.replace('/dashboard');
+      if (window.parent !== window) {
+        window.parent.postMessage({ type: 'pms:auth-success' }, window.location.origin);
+      } else {
+        router.replace('/dashboard');
+      }
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Could not create your account.');
     }
   });
 
   return (
-    <form onSubmit={onSubmit} className="space-y-5" noValidate>
+    <form onSubmit={onSubmit} className="space-y-4" noValidate>
       <div>
         <h1 className="text-xl font-semibold text-slate-900">Create your organization</h1>
         <p className="mt-1 text-sm text-slate-500">You become the Owner. Add properties and staff after signing up.</p>
