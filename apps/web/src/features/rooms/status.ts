@@ -4,6 +4,7 @@ export const STATUS_META: Record<RoomStatus, { label: string; tile: string; dot:
   AVAILABLE: { label: 'Available', tile: 'bg-emerald-50 ring-emerald-200 text-emerald-900', dot: 'bg-emerald-500' },
   DIRTY: { label: 'Dirty', tile: 'bg-amber-50 ring-amber-200 text-amber-900', dot: 'bg-amber-500' },
   CLEANING: { label: 'Cleaning', tile: 'bg-sky-50 ring-sky-200 text-sky-900', dot: 'bg-sky-500' },
+  CLEAN: { label: 'Clean (to inspect)', tile: 'bg-lime-50 ring-lime-300 text-lime-900', dot: 'bg-lime-500' },
   INSPECTED: { label: 'Inspected', tile: 'bg-teal-50 ring-teal-200 text-teal-900', dot: 'bg-teal-500' },
   MAINTENANCE: { label: 'Maintenance', tile: 'bg-orange-50 ring-orange-200 text-orange-900', dot: 'bg-orange-500' },
   OUT_OF_ORDER: { label: 'Out of order', tile: 'bg-red-50 ring-red-200 text-red-900', dot: 'bg-red-500' },

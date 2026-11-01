@@ -35,7 +35,7 @@ const DEPARTMENTS = ['Front Desk', 'Housekeeping', 'Maintenance', 'Food & Bevera
 // ---------------------------------------------------------------- demo rooms (demo organization only)
 const STATUS_CYCLE: Array<{ status: RoomStatus; note?: string }> = [
   { status: 'AVAILABLE' }, { status: 'AVAILABLE' }, { status: 'AVAILABLE' }, { status: 'DIRTY' },
-  { status: 'CLEANING' }, { status: 'INSPECTED' }, { status: 'AVAILABLE' },
+  { status: 'CLEANING' }, { status: 'CLEAN' }, { status: 'INSPECTED' }, { status: 'AVAILABLE' },
   { status: 'MAINTENANCE', note: 'Aircon not cooling' }, { status: 'AVAILABLE' }, { status: 'AVAILABLE' },
   { status: 'OUT_OF_ORDER', note: 'Water damage in bathroom' }, { status: 'DIRTY' },
 ];
@@ -311,6 +311,85 @@ async function seedDeposits(organizationId: string, propertyId: string, currency
   }
 }
 
+// ---------------------------------------------------------------- demo staff, housekeeping tasks, maintenance tickets
+const DEMO_STAFF: Array<{ key: string; first: string; last: string; role: string; slugs: string[] }> = [
+  { key: 'manager', first: 'Maya', last: 'Manager', role: 'PROPERTY_MANAGER', slugs: ['manila-grand'] },
+  { key: 'frontdesk', first: 'Fiona', last: 'Front', role: 'FRONT_DESK', slugs: ['manila-grand'] },
+  { key: 'supervisor', first: 'Sam', last: 'Supervisor', role: 'HOUSEKEEPING_SUPERVISOR', slugs: ['manila-grand', 'baguio-lodge'] },
+  { key: 'housekeeper1', first: 'Hana', last: 'Cruz', role: 'HOUSEKEEPER', slugs: ['manila-grand'] },
+  { key: 'housekeeper2', first: 'Hugo', last: 'Reyes', role: 'HOUSEKEEPER', slugs: ['manila-grand'] },
+  { key: 'maintenance', first: 'Mario', last: 'Tech', role: 'MAINTENANCE', slugs: ['manila-grand'] },
+];
+
+/** Demo logins (same password as the owner): manager@, frontdesk@, supervisor@, housekeeper1@, housekeeper2@, maintenance@ abc-hospitality.test */
+async function seedStaff(organizationId: string, propertyIds: Map<string, string>, password: string): Promise<Map<string, string>> {
+  const passwordHash = await argon2.hash(password, { type: argon2.argon2id });
+  const ids = new Map<string, string>();
+  for (const d of DEMO_STAFF) {
+    const email = `${d.key}@abc-hospitality.test`;
+    const user = await prisma.user.upsert({
+      where: { email },
+      update: {},
+      create: { organizationId, email, passwordHash, firstName: d.first, lastName: d.last, status: UserStatus.ACTIVE, emailVerifiedAt: new Date() },
+    });
+    ids.set(d.key, user.id);
+    const role = await prisma.role.findFirstOrThrow({ where: { organizationId: null, key: d.role } });
+    for (const slug of d.slugs) {
+      const scopeId = propertyIds.get(slug);
+      if (!scopeId) continue;
+      const exists = await prisma.userRoleAssignment.findFirst({ where: { userId: user.id, roleId: role.id, scopeType: ScopeType.PROPERTY, scopeId } });
+      if (!exists) await prisma.userRoleAssignment.create({ data: { organizationId, userId: user.id, roleId: role.id, scopeType: ScopeType.PROPERTY, scopeId } });
+    }
+  }
+  return ids;
+}
+
+/** Tasks for rooms that need cleaning and tickets for rooms that are broken. Only for properties that have none yet. */
+async function seedOperations(organizationId: string, propertyId: string, slug: string, staff: Map<string, string>) {
+  const rooms = await prisma.room.findMany({ where: { propertyId, deletedAt: null }, orderBy: { number: 'asc' } });
+
+  if ((await prisma.housekeepingTask.count({ where: { propertyId } })) === 0) {
+    const cleaners = slug === 'manila-grand' ? [staff.get('housekeeper1'), staff.get('housekeeper2')].filter((x): x is string => Boolean(x)) : [];
+    let i = 0;
+    for (const r of rooms) {
+      if (!['DIRTY', 'CLEANING', 'CLEAN'].includes(r.status)) continue;
+      const assignee = cleaners.length ? (cleaners[i++ % cleaners.length] ?? null) : null;
+      const status = r.status === 'DIRTY' ? (assignee ? 'ASSIGNED' : 'OPEN') : r.status === 'CLEANING' ? (assignee ? 'IN_PROGRESS' : 'OPEN') : 'CLEANED';
+      await prisma.housekeepingTask.create({
+        data: {
+          organizationId, propertyId, roomId: r.id, type: 'CHECKOUT_CLEAN', status, priority: i % 4 === 0 ? 'HIGH' : 'NORMAL',
+          assignedToId: status === 'OPEN' ? null : assignee, assignedAt: status === 'OPEN' || !assignee ? null : new Date(),
+          startedAt: status === 'IN_PROGRESS' || status === 'CLEANED' ? new Date() : null, cleanedAt: status === 'CLEANED' ? new Date() : null,
+          estimatedMinutes: 30, notes: 'Turnover clean',
+        },
+      });
+    }
+  }
+
+  if ((await prisma.maintenanceTicket.count({ where: { propertyId } })) === 0) {
+    const tech = slug === 'manila-grand' ? staff.get('maintenance') ?? null : null;
+    for (const r of rooms) {
+      if (!['MAINTENANCE', 'OUT_OF_ORDER'].includes(r.status)) continue;
+      const inProgress = r.status === 'MAINTENANCE' && tech !== null;
+      await prisma.maintenanceTicket.create({
+        data: {
+          organizationId, propertyId, roomId: r.id, title: r.statusNote ?? 'Room out of service', category: r.status === 'MAINTENANCE' ? 'AIRCON' : 'PLUMBING',
+          priority: r.status === 'OUT_OF_ORDER' ? 'HIGH' : 'NORMAL', status: inProgress ? 'IN_PROGRESS' : 'REPORTED', blocksRoom: true,
+          assignedToId: inProgress ? tech : null, assignedAt: inProgress ? new Date() : null, startedAt: inProgress ? new Date() : null,
+        },
+      });
+    }
+    if (slug === 'manila-grand') {
+      await prisma.maintenanceTicket.createMany({
+        data: [
+          { organizationId, propertyId, title: 'Lobby Wi-Fi drops in the evening', category: 'INTERNET', priority: 'NORMAL', status: 'REPORTED', blocksRoom: false },
+          { organizationId, propertyId, title: 'Wobbly chair in the restaurant', category: 'FURNITURE', priority: 'LOW', status: 'REPORTED', blocksRoom: false },
+        ],
+      });
+    }
+  }
+}
+
 async function seedPermissionsAndRoles() {
   for (const p of PERMISSIONS) {
     await prisma.permission.upsert({ where: { key: p.key }, update: p, create: p });
@@ -409,6 +488,11 @@ async function seedDemoOrganization() {
       scopeType: ScopeType.ORGANIZATION, scopeId: org.id,
     },
   });
+
+  const propertyRows: Array<{ id: string; slug: string }> = await prisma.property.findMany({ where: { organizationId: org.id }, select: { id: true, slug: true } });
+  const propertyIds = new Map<string, string>(propertyRows.map((p) => [p.slug, p.id] as [string, string]));
+  const staff = await seedStaff(org.id, propertyIds, password);
+  for (const [slug, propertyId] of propertyIds) await seedOperations(org.id, propertyId, slug, staff);
 
   return { org, email };
 }

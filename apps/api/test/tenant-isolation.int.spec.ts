@@ -54,6 +54,8 @@ beforeAll(async () => {
 afterAll(async () => {
   await owner.auditLog.deleteMany({ where: { organizationId: { in: [orgA, orgB] } } });
   const orgs = { organizationId: { in: [orgA, orgB] } };
+  await owner.housekeepingTask.deleteMany({ where: orgs });
+  await owner.maintenanceTicket.deleteMany({ where: orgs });
   await owner.refund.deleteMany({ where: orgs });
   await owner.payment.deleteMany({ where: orgs });
   await owner.folioItem.deleteMany({ where: orgs });
@@ -206,6 +208,44 @@ describe('tenant isolation (Row-Level Security)', () => {
       const key = `idem-${suffix}`;
       await owner.payment.create({ data: { organizationId: orgA, folioId, amountMinor: 100, method: 'CASH', idempotencyKey: key } });
       await expect(owner.payment.create({ data: { organizationId: orgA, folioId, amountMinor: 100, method: 'CASH', idempotencyKey: key } })).rejects.toThrow();
+    });
+  });
+
+  describe('operations (housekeeping and maintenance)', () => {
+    let taskId = '';
+
+    beforeAll(async () => {
+      taskId = (await owner.housekeepingTask.create({ data: { organizationId: orgA, propertyId: propA, roomId: roomA, type: 'CHECKOUT_CLEAN' } })).id;
+    });
+
+    it('is isolated per organization', async () => {
+      expect(await asTenant(orgB, (tx) => tx.housekeepingTask.count({ where: { id: taskId } }))).toBe(0);
+      expect(await asTenant(orgA, (tx) => tx.housekeepingTask.count({ where: { id: taskId } }))).toBe(1);
+      const sneaky = asTenant(orgB, (tx) => tx.maintenanceTicket.create({ data: { organizationId: orgA, propertyId: propA, title: 'x', category: 'OTHER' } }));
+      await expect(sneaky).rejects.toThrow();
+    });
+
+    it('only one open cleaning task of a kind can exist per room', async () => {
+      await expect(owner.housekeepingTask.create({ data: { organizationId: orgA, propertyId: propA, roomId: roomA, type: 'CHECKOUT_CLEAN' } })).rejects.toThrow();
+      // a different kind is fine, and once the first is done a new one is allowed
+      await expect(owner.housekeepingTask.create({ data: { organizationId: orgA, propertyId: propA, roomId: roomA, type: 'DEEP_CLEAN' } })).resolves.toBeTruthy();
+      await owner.housekeepingTask.update({ where: { id: taskId }, data: { status: 'DONE' } });
+      await expect(owner.housekeepingTask.create({ data: { organizationId: orgA, propertyId: propA, roomId: roomA, type: 'CHECKOUT_CLEAN' } })).resolves.toBeTruthy();
+    });
+
+    it('createMany with skipDuplicates (used by check-out automation) never fails on a duplicate', async () => {
+      const again = await owner.housekeepingTask.createMany({ data: [{ organizationId: orgA, propertyId: propA, roomId: roomA, type: 'CHECKOUT_CLEAN' }], skipDuplicates: true });
+      expect(again.count).toBe(0);
+    });
+
+    it('maintenance cost and time can never be negative; estimated minutes must be positive', async () => {
+      await expect(owner.maintenanceTicket.create({ data: { organizationId: orgA, propertyId: propA, title: 'neg', category: 'OTHER', costMinor: -1 } })).rejects.toThrow();
+      await expect(owner.maintenanceTicket.create({ data: { organizationId: orgA, propertyId: propA, title: 'neg', category: 'OTHER', minutesSpent: -5 } })).rejects.toThrow();
+      await expect(owner.housekeepingTask.create({ data: { organizationId: orgA, propertyId: propA, roomId: roomB, type: 'STAYOVER', estimatedMinutes: 0 } })).rejects.toThrow();
+    });
+
+    it('tasks and tickets can never be deleted by the application role', async () => {
+      await expect(asTenant(orgA, (tx) => tx.housekeepingTask.deleteMany({ where: { id: taskId } }))).rejects.toThrow();
     });
   });
 

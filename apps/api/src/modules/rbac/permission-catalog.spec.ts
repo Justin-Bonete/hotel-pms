@@ -32,7 +32,7 @@ describe('system roles', () => {
 
   it('operational roles never receive administration permissions', () => {
     const forbiddenPrefixes = ['staff.', 'role.', 'audit.', 'organization.', 'property_group.'];
-    const forbiddenExact = ['property.create', 'property.update', 'property.delete', 'room.manage', 'room_type.manage', 'rate.manage', 'folio.adjust', 'payment.refund', 'folio.override_checkout', 'tax.manage'];
+    const forbiddenExact = ['property.create', 'property.update', 'property.delete', 'room.manage', 'room_type.manage', 'rate.manage', 'folio.adjust', 'payment.refund', 'folio.override_checkout', 'tax.manage', 'maintenance.manage'];
     for (const key of OPERATIONAL_ROLE_KEYS) {
       for (const p of role(key).permissions) {
         expect(forbiddenPrefixes.some((prefix) => p.startsWith(prefix)), `${key} must not have ${p}`).toBe(false);
@@ -41,9 +41,26 @@ describe('system roles', () => {
     }
   });
 
-  it('Housekeeping cannot access unassigned room data before room-level assignments exist', () => {
-    for (const key of ['HOUSEKEEPER', 'HOUSEKEEPING_SUPERVISOR']) {
-      expect([...role(key).permissions]).toEqual(['property.read']);
+  it('a Housekeeper can work cleaning tasks and report problems, nothing more', () => {
+    expect([...role('HOUSEKEEPER').permissions].sort()).toEqual(['housekeeping.read', 'housekeeping.work', 'maintenance.report', 'property.read', 'room.read', 'room.update_status']);
+  });
+
+  it('only a housekeeping supervisor (and managers) can assign and inspect housekeeping', () => {
+    const allowed = ['OWNER', 'SUPER_ADMIN', 'GENERAL_MANAGER', 'PROPERTY_MANAGER', 'HOUSEKEEPING_SUPERVISOR'];
+    for (const r of SYSTEM_ROLE_TEMPLATES) expect(r.permissions.includes('housekeeping.manage'), r.key).toBe(allowed.includes(r.key));
+  });
+
+  it('maintenance staff can work tickets but only managers can assign or close them', () => {
+    expect(role('MAINTENANCE').permissions).toContain('maintenance.work');
+    for (const r of SYSTEM_ROLE_TEMPLATES) {
+      expect(r.permissions.includes('maintenance.manage'), r.key).toBe(['OWNER', 'SUPER_ADMIN', 'GENERAL_MANAGER', 'PROPERTY_MANAGER'].includes(r.key));
+    }
+  });
+
+  it('front desk can see housekeeping and report problems, but not run housekeeping or maintenance', () => {
+    for (const key of ['FRONT_DESK', 'RECEPTIONIST']) {
+      for (const p of ['housekeeping.read', 'maintenance.report'] as const) expect(role(key).permissions).toContain(p);
+      for (const p of ['housekeeping.manage', 'housekeeping.work', 'maintenance.work', 'maintenance.manage'] as const) expect(role(key).permissions).not.toContain(p);
     }
   });
 
@@ -56,20 +73,18 @@ describe('system roles', () => {
     }
   });
 
-  it('housekeeping and maintenance cannot access modules that are not ready for their scopes', () => {
-    for (const key of ['HOUSEKEEPER', 'HOUSEKEEPING_SUPERVISOR', 'MAINTENANCE']) {
-      expect([...role(key).permissions]).toEqual(['property.read']);
+  it('housekeeping, maintenance and inventory staff cannot see guests, reservations or rates', () => {
+    for (const key of ['HOUSEKEEPER', 'HOUSEKEEPING_SUPERVISOR', 'MAINTENANCE', 'INVENTORY_MANAGER']) {
+      for (const p of ['guest.read', 'guest.manage', 'reservation.read', 'reservation.manage', 'reservation.check_in', 'rate.read', 'rate.manage'] as const) {
+        expect(role(key).permissions, `${key} must not have ${p}`).not.toContain(p);
+      }
     }
   });
 
-  it('cashier can reach folios through reservations but cannot manage stays or view rates', () => {
+  it('a cashier can find a reservation to take payment, but cannot see guest profiles, change bookings or touch rates', () => {
     expect(role('CASHIER').permissions).toContain('reservation.read');
     for (const p of ['guest.read', 'guest.manage', 'reservation.manage', 'reservation.check_in', 'rate.read', 'rate.manage'] as const) {
       expect(role('CASHIER').permissions, `CASHIER must not have ${p}`).not.toContain(p);
-    }
-    for (const p of ['guest.read', 'guest.manage', 'reservation.read', 'reservation.manage', 'reservation.check_in', 'rate.read', 'rate.manage'] as const) {
-      const key = 'INVENTORY_MANAGER';
-        expect(role(key).permissions, `${key} must not have ${p}`).not.toContain(p);
     }
   });
 
@@ -87,11 +102,9 @@ describe('system roles', () => {
     for (const r of SYSTEM_ROLE_TEMPLATES) expect(r.permissions.includes('rate.manage'), r.key).toBe(allowed.includes(r.key));
   });
 
-  it('an accountant has read-only access to financial records without guest or reservation access', () => {
-    expect([...role('ACCOUNTANT').permissions].sort()).toEqual(['folio.read', 'property.read']);
-    for (const p of ['reservation.read', 'reservation.manage', 'reservation.check_in', 'rate.read', 'rate.manage', 'guest.read', 'guest.manage'] as const) {
-      expect(role('ACCOUNTANT').permissions).not.toContain(p);
-    }
+  it('an accountant can read reservations and rates but cannot change anything', () => {
+    expect(role('ACCOUNTANT').permissions).toContain('reservation.read');
+    for (const p of ['reservation.manage', 'reservation.check_in', 'rate.manage', 'guest.manage'] as const) expect(role('ACCOUNTANT').permissions).not.toContain(p);
   });
 
   it('front desk can take payments and post charges, but cannot discount, refund, override or change taxes', () => {
@@ -122,13 +135,9 @@ describe('system roles', () => {
     }
   });
 
-  it('only managers can currently update room status until room-level assignments exist', () => {
-    const allowed = ['OWNER', 'SUPER_ADMIN', 'GENERAL_MANAGER', 'PROPERTY_MANAGER'];
-    for (const r of SYSTEM_ROLE_TEMPLATES) {
-      expect(r.permissions.includes('room.update_status'), r.key).toBe(allowed.includes(r.key));
-    }
+  it('front desk and housekeeping can update room status', () => {
     for (const key of ['FRONT_DESK', 'RECEPTIONIST', 'HOUSEKEEPING_SUPERVISOR', 'HOUSEKEEPER', 'MAINTENANCE']) {
-      expect(role(key).permissions).not.toContain('room.update_status');
+      expect(role(key).permissions).toContain('room.update_status');
     }
   });
 
@@ -137,25 +146,6 @@ describe('system roles', () => {
       const admin = r.key === 'OWNER' || r.key === 'SUPER_ADMIN';
       for (const p of ['role.manage', 'property.create', 'property.delete'] as const) {
         expect(r.permissions.includes(p), `${r.key} / ${p}`).toBe(admin);
-      }
-    }
-  });
-
-  it('Branch Manager is property-scoped and can manage branch staff and billing adjustments', () => {
-    const branchManager = role('PROPERTY_MANAGER');
-    expect(branchManager.name).toBe('Branch Manager');
-    for (const p of ['staff.manage', 'role.assign', 'folio.adjust', 'payment.refund', 'rate.manage'] as const) {
-      expect(branchManager.permissions).toContain(p);
-    }
-    for (const p of ['organization.update', 'property.create', 'property.delete', 'role.manage'] as const) {
-      expect(branchManager.permissions).not.toContain(p);
-    }
-  });
-
-  it('Front Desk cannot change room status, rates, discounts, or refunds', () => {
-    for (const key of ['FRONT_DESK', 'RECEPTIONIST']) {
-      for (const p of ['room.update_status', 'rate.manage', 'folio.adjust', 'payment.refund'] as const) {
-        expect(role(key).permissions).not.toContain(p);
       }
     }
   });

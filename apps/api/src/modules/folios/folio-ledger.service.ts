@@ -1,7 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import type { Prisma } from '@prisma/client';
 import { randomUUID } from 'node:crypto';
-import { calcTaxMinor, eachNight, formatRate, nightlyRatesFrom, parseDate, toDateString } from '@pms/types';
+import { addDays, calcTaxMinor, eachNight, formatRate, nightlyRatesFrom, parseDate, toDateString } from '@pms/types';
 import type { Tx } from '../../database/prisma/prisma.service';
 
 export interface StayForBilling {
@@ -50,8 +50,23 @@ export class FolioLedger {
 
     const nights = eachNight(toDateString(stay.arrivalDate), toDateString(stay.departureDate));
     const rates = nightlyRatesFrom(stay.nightlyRates, nights.length, stay.totalMinor);
-    const taxes = await tx.tax.findMany({ where: { propertyId: stay.propertyId, isActive: true, deletedAt: null, appliesToRoom: true }, orderBy: { name: 'asc' } });
+    const rows = await this.nightRows(tx, stay, folio.id, nights, rates, actorId);
+    if (rows.length > 0) await tx.folioItem.createMany({ data: rows });
+    return true;
+  }
 
+  /** An in-house guest stays longer: bill the added nights (and their taxes) from `fromDate`. Returns false if the folio is closed. */
+  async postExtraNights(tx: Tx, stay: StayForBilling, fromDate: string, rates: number[], actorId: string | null): Promise<boolean> {
+    const folio = await this.ensureFolio(tx, stay);
+    if (folio.status !== 'OPEN') return false;
+    const nights = rates.map((_, i) => addDays(fromDate, i));
+    const rows = await this.nightRows(tx, stay, folio.id, nights, rates, actorId);
+    if (rows.length > 0) await tx.folioItem.createMany({ data: rows });
+    return true;
+  }
+
+  private async nightRows(tx: Tx, stay: StayForBilling, folioId: string, nights: string[], rates: number[], actorId: string | null): Promise<Prisma.FolioItemCreateManyInput[]> {
+    const taxes = await tx.tax.findMany({ where: { propertyId: stay.propertyId, isActive: true, deletedAt: null, appliesToRoom: true }, orderBy: { name: 'asc' } });
     const rows: Prisma.FolioItemCreateManyInput[] = [];
     nights.forEach((night, i) => {
       const amount = rates[i] ?? 0;
@@ -59,7 +74,7 @@ export class FolioLedger {
       rows.push({
         id,
         organizationId: stay.organizationId,
-        folioId: folio.id,
+        folioId,
         type: 'ROOM_CHARGE',
         description: `Room ${stay.roomNumber} · ${stay.roomTypeName}`,
         serviceDate: parseDate(night),
@@ -75,7 +90,7 @@ export class FolioLedger {
         rows.push({
           id: randomUUID(),
           organizationId: stay.organizationId,
-          folioId: folio.id,
+          folioId,
           type: 'TAX',
           description: `${tax.name} (${formatRate(tax.rateBps)})`,
           serviceDate: parseDate(night),
@@ -89,8 +104,7 @@ export class FolioLedger {
         });
       }
     });
-    if (rows.length > 0) await tx.folioItem.createMany({ data: rows });
-    return true;
+    return rows;
   }
 
   async balance(tx: Tx, folioId: string): Promise<BalanceSnapshot> {

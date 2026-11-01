@@ -1,0 +1,15 @@
+{
+  "headers": {
+    "x-nextjs-stale-time": "300",
+    "x-nextjs-prerender": "1",
+    "x-next-cache-tags": "_N_T_/layout,_N_T_/(public)/layout,_N_T_/(public)/verify-email/layout,_N_T_/(public)/verify-email/page,_N_T_/verify-email"
+  },
+  "routeCache": {
+    "key": "/route-cache/APP_PAGE/e19e486889bdaad2b0ff3e941d2dfd3321a47646dd50ee1748c5b3d400533e82/$/verify-email",
+    "owner": {
+      "kind": "APP_PAGE",
+      "sourceRoute": "/(public)/verify-email/page"
+    },
+    "isFallback": false
+  }
+}

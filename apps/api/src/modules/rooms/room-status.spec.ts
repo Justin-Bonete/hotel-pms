@@ -14,10 +14,15 @@ describe('room status rules', () => {
     }
   });
 
-  it('follows the housekeeping flow: dirty -> cleaning -> inspected -> available', () => {
+  it('follows the housekeeping flow: dirty -> cleaning -> clean -> available', () => {
     expect(canTransition('DIRTY', 'CLEANING')).toBe(true);
-    expect(canTransition('CLEANING', 'INSPECTED')).toBe(true);
-    expect(canTransition('INSPECTED', 'AVAILABLE')).toBe(true);
+    expect(canTransition('CLEANING', 'CLEAN')).toBe(true);
+    expect(canTransition('CLEAN', 'AVAILABLE')).toBe(true);
+  });
+
+  it('has no shortcuts around cleaning and inspection', () => {
+    expect(canTransition('DIRTY', 'CLEAN')).toBe(false);
+    expect(canTransition('CLEANING', 'AVAILABLE')).toBe(false);
   });
 
   it('does not let a dirty room become available without being cleaned', () => {

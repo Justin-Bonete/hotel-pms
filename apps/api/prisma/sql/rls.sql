@@ -25,7 +25,7 @@ BEGIN
     'property_groups','properties','departments','buildings','floors',
     'users','user_sessions','auth_tokens','user_role_assignments','audit_logs',
     'room_types','rooms','guests','rate_plans','rate_plan_rates','reservations',
-    'taxes','folios','folio_items','payments','refunds'
+    'taxes','folios','folio_items','payments','refunds','housekeeping_tasks','maintenance_tickets'
   ] LOOP
     EXECUTE format('ALTER TABLE %I ENABLE ROW LEVEL SECURITY', t);
     EXECUTE format('DROP POLICY IF EXISTS tenant_isolation ON %I', t);
@@ -57,6 +57,10 @@ CREATE UNIQUE INDEX IF NOT EXISTS roles_system_key_unique ON roles (key) WHERE o
 CREATE UNIQUE INDEX IF NOT EXISTS rooms_property_number_unique ON rooms (property_id, number) WHERE deleted_at IS NULL;
 CREATE UNIQUE INDEX IF NOT EXISTS room_types_property_name_unique ON room_types (property_id, lower(name)) WHERE deleted_at IS NULL;
 
+-- At most one open task of a kind per room (prevents duplicate cleaning tasks, even under concurrent check-outs).
+CREATE UNIQUE INDEX IF NOT EXISTS housekeeping_one_open_task_per_room
+  ON housekeeping_tasks (room_id, type) WHERE status IN ('OPEN', 'ASSIGNED', 'IN_PROGRESS', 'CLEANED');
+
 CREATE UNIQUE INDEX IF NOT EXISTS guests_org_email_unique ON guests (organization_id, lower(email)) WHERE email IS NOT NULL AND deleted_at IS NULL;
 
 -- ---- Reservations: the database itself refuses double-booking, whatever the application does.
@@ -74,6 +78,12 @@ BEGIN
   END IF;
   IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'reservations_guests_check') THEN
     ALTER TABLE reservations ADD CONSTRAINT reservations_guests_check CHECK (adults >= 1 AND children >= 0 AND total_minor >= 0);
+  END IF;
+  IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'maintenance_nonnegative_check') THEN
+    ALTER TABLE maintenance_tickets ADD CONSTRAINT maintenance_nonnegative_check CHECK (cost_minor >= 0 AND minutes_spent >= 0);
+  END IF;
+  IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'housekeeping_estimate_check') THEN
+    ALTER TABLE housekeeping_tasks ADD CONSTRAINT housekeeping_estimate_check CHECK (estimated_minutes IS NULL OR estimated_minutes > 0);
   END IF;
   IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'folio_items_amount_check') THEN
     ALTER TABLE folio_items ADD CONSTRAINT folio_items_amount_check CHECK (quantity >= 1 AND amount_minor = quantity * unit_amount_minor);
@@ -99,8 +109,8 @@ GRANT SELECT, INSERT, UPDATE, DELETE ON
   room_types, rooms, guests, rate_plans, rate_plan_rates, reservations, taxes
 TO pms_app;
 
--- Folios may be opened and closed (UPDATE) but never deleted.
-GRANT SELECT, INSERT, UPDATE ON folios TO pms_app;
+-- Folios may be opened and closed (UPDATE) but never deleted. Tasks and tickets are never deleted either.
+GRANT SELECT, INSERT, UPDATE ON folios, housekeeping_tasks, maintenance_tickets TO pms_app;
 
 -- The money ledger is APPEND-ONLY for the application: insert and read, never change or remove.
 GRANT SELECT, INSERT ON folio_items, payments, refunds TO pms_app;

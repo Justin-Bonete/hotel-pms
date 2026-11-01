@@ -26,4 +26,26 @@ export class RbacRepository {
       include: { permissions: { select: { permission: { select: { key: true } } } } },
     });
   }
+
+  /**
+   * Active users who hold a permission at a property: through an organization-wide role, a role on the
+   * property's group, or a role on the property itself.
+   */
+  async usersWithPermission(tx: Tx, propertyId: string, groupId: string | null, permissionKey: string) {
+    const scopes: Array<{ scopeType: 'ORGANIZATION' | 'PROPERTY' | 'GROUP'; scopeId?: string }> = [
+      { scopeType: 'ORGANIZATION' },
+      { scopeType: 'PROPERTY', scopeId: propertyId },
+    ];
+    if (groupId) scopes.push({ scopeType: 'GROUP', scopeId: groupId });
+    const rows = await tx.userRoleAssignment.findMany({
+      where: {
+        OR: scopes,
+        role: { permissions: { some: { permission: { key: permissionKey } } } },
+        user: { status: 'ACTIVE', deletedAt: null },
+      },
+      select: { user: { select: { id: true, firstName: true, lastName: true } } },
+    });
+    const unique = new Map(rows.map((r) => [r.user.id, r.user]));
+    return [...unique.values()].sort((a, b) => `${a.firstName} ${a.lastName}`.localeCompare(`${b.firstName} ${b.lastName}`));
+  }
 }

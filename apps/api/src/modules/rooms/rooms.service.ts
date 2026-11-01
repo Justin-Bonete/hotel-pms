@@ -10,6 +10,7 @@ import { Paginated } from '../../common/http/response.interceptor';
 import { emptyToNull } from '../../common/text/text';
 import { PrismaService, Tx } from '../../database/prisma/prisma.service';
 import { AuditService } from '../audit/audit.service';
+import { RealtimeService } from '../realtime/realtime.service';
 
 const include = {
   roomType: { select: { name: true } },
@@ -38,6 +39,7 @@ export class RoomsService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly audit: AuditService,
+    private readonly realtime: RealtimeService,
   ) {}
 
   async list(propertyId: string, query: RoomsQuery, access: AccessContext): Promise<Paginated<RoomView>> {
@@ -101,6 +103,7 @@ export class RoomsService {
         include,
       });
       await this.audit.record(tx, { organizationId: access.organizationId, actorId: access.userId, propertyId, action: 'room.created', entity: 'room', entityId: row.id, after: { number: row.number, roomType: row.roomType.name } });
+      this.realtime.emit(access.organizationId, 'room.changed', propertyId, [row.id]);
       return toView(row);
     });
   }
@@ -125,6 +128,7 @@ export class RoomsService {
       if (diff.changed.length > 0) {
         await this.audit.record(tx, { organizationId: access.organizationId, actorId: access.userId, propertyId: row.propertyId, action: 'room.updated', entity: 'room', entityId: id, before: diff.before, after: diff.after });
       }
+      this.realtime.emit(access.organizationId, 'room.changed', row.propertyId, [id]);
       return toView(row);
     });
   }
@@ -162,6 +166,7 @@ export class RoomsService {
         before: { number: room.number, status: room.status },
         after: { number: room.number, status: dto.status, note: emptyToNull(dto.note) ?? null },
       });
+      this.realtime.emit(access.organizationId, 'room.changed', room.propertyId, [id]);
       const fresh = await tx.room.findFirstOrThrow({ where: { id }, include });
       return toView(fresh);
     });

@@ -1,0 +1,15 @@
+{
+  "headers": {
+    "x-nextjs-stale-time": "300",
+    "x-nextjs-prerender": "1",
+    "x-next-cache-tags": "_N_T_/layout,_N_T_/(dashboard)/layout,_N_T_/(dashboard)/rooms/layout,_N_T_/(dashboard)/rooms/page,_N_T_/rooms"
+  },
+  "routeCache": {
+    "key": "/route-cache/APP_PAGE/e87c2f610facf8d2ccbaaa1061982f2eaa2dc2ca739f454605393b3dd00037cd/$/rooms",
+    "owner": {
+      "kind": "APP_PAGE",
+      "sourceRoute": "/(dashboard)/rooms/page"
+    },
+    "isFallback": false
+  }
+}

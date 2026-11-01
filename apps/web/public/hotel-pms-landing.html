@@ -1,0 +1,325 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Bonete's Hotel: hotel management for every branch</title>
+<meta name="description" content="Reservations, front desk, housekeeping and billing for every branch of your hotel, behind one login.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,600&family=DM+Sans:wght@400;500;700&display=swap" rel="stylesheet">
+<style>
+:root{--ink:#071a20;--lagoon:#0d2c35;--sand:#f1e8d8;--brass:#c9a45c;--text:#e9efe9;--mute:#b3c6c4;--serif:Fraunces,Georgia,serif;--ease:cubic-bezier(.2,.8,.2,1);--px:clamp(20px,4vw,56px)}
+*{box-sizing:border-box;margin:0}
+html{scroll-behavior:smooth}
+body{font:400 17px/1.6 'DM Sans',system-ui,sans-serif;background:var(--ink);color:var(--text)}
+body.is-loading,.auth-open{overflow:hidden}
+a{color:inherit}
+:focus-visible{outline:2px solid var(--brass);outline-offset:3px}
+.page-shell{transition:filter .35s,transform .45s,opacity .8s}
+body.is-loading .page-shell{opacity:0;transform:translateY(12px)}
+.auth-open .page-shell{filter:blur(8px) brightness(.66);transform:scale(.992);pointer-events:none;user-select:none}
+.loader{position:fixed;inset:0;z-index:100;display:grid;place-items:center;background:radial-gradient(ellipse at 50% 43%,#123b43,#0a242c 38%,var(--ink) 76%);transition:opacity .75s,visibility 0s .75s}
+.loader.is-leaving{opacity:0;visibility:hidden}
+.loader-content{display:flex;flex-direction:column;align-items:center;text-align:center;padding:32px}
+.loader-emblem{position:relative;display:grid;place-items:center;width:82px;height:82px;margin-bottom:30px}
+.loader-emblem::before,.loader-emblem::after{position:absolute;inset:0;content:"";border:1px solid #c9a45c80;border-radius:50%;animation:spin 9s linear infinite}
+.loader-emblem::after{inset:8px;border-color:#c9a45c35;animation-direction:reverse}
+.loader-mark{width:19px;height:19px;background:var(--brass);transform:rotate(45deg);box-shadow:0 0 28px #c9a45c88}
+.loader-name{font:600 clamp(27px,5vw,38px)/1.15 var(--serif)}
+.loader-caption{margin-top:11px;color:var(--mute);font-size:12px;font-weight:500;letter-spacing:.22em;text-transform:uppercase}
+.loader-progress{width:min(220px,60vw);height:2px;margin-top:36px;overflow:hidden;background:#e9efe922}
+.loader-progress span{display:block;width:38%;height:100%;background:var(--brass);box-shadow:0 0 12px #c9a45c99;animation:sweep 1.7s ease-in-out infinite}
+.loader-status{margin-top:12px;color:#b3c6c499;font-size:12px;letter-spacing:.08em}
+@keyframes spin{to{transform:rotate(360deg)}}
+@keyframes sweep{0%{transform:translateX(-110%)}100%{transform:translateX(370%)}}
+.btn{display:inline-block;padding:13px 24px;border-radius:99px;font-weight:700;font-size:16px;text-decoration:none;border:1.5px solid var(--brass);cursor:pointer;transition:transform .25s var(--ease),background .25s,box-shadow .25s}
+.btn:hover{transform:translateY(-3px);box-shadow:0 10px 30px #c9a45c40}
+.btn.p{background:var(--brass);color:#1b1608}
+.btn.g{color:var(--text);background:#071a2066;backdrop-filter:blur(6px)}
+#bar{position:fixed;top:0;left:0;right:0;height:3px;z-index:30;background:var(--brass);transform:scaleX(0);transform-origin:0}
+nav{position:fixed;inset:0 0 auto;z-index:20;display:flex;align-items:center;justify-content:space-between;padding:16px var(--px);background:linear-gradient(#071a20ee,#071a2000)}
+.brand{font:600 24px var(--serif);text-decoration:none;display:flex;align-items:center;gap:10px}
+.brand i{width:14px;height:14px;background:var(--brass);transform:rotate(45deg);display:block}
+nav .links{display:flex;align-items:center;gap:24px}
+nav .links a:not(.btn){text-decoration:none;color:var(--mute);font-weight:500}
+nav .links a:not(.btn):hover{color:#fff}
+nav .btn{padding:9px 20px}
+#stage{position:fixed;inset:0;z-index:0}
+.shade{position:fixed;inset:0;z-index:1;pointer-events:none;transition:transform .8s var(--ease);background:linear-gradient(90deg,#071a20 0,#071a20b0 32%,#071a2000 62%),linear-gradient(0deg,#071a20cc,#071a2000 28%)}
+.shade.r{transform:scaleX(-1)}
+.hero,.ch{position:relative;z-index:2;pointer-events:none}
+.hero{min-height:100svh;display:flex;flex-direction:column;justify-content:space-between;gap:24px;padding:120px var(--px) 28px}
+.copy{max-width:600px}
+.copy a,.tour>*,.card,.live{pointer-events:auto}
+h1{font:600 clamp(42px,6.4vw,84px)/1.02 var(--serif);letter-spacing:-.02em}
+.w{display:inline-block;overflow:hidden;vertical-align:top;padding-bottom:.08em}
+.w>span{display:inline-block;animation:up 1s calc(.15s + var(--i)*.08s) var(--ease) both}
+body.is-loading .w>span{animation:none;transform:translateY(110%)}
+@keyframes up{from{transform:translateY(110%)}}
+.copy p{margin:22px 0 30px;color:var(--mute);max-width:46ch;font-size:18px;animation:fade 1s .7s both}
+.btns{display:flex;gap:12px;flex-wrap:wrap;animation:fade 1s .9s both}
+@keyframes fade{from{opacity:0;transform:translateY(14px)}}
+.tour{display:flex;justify-content:space-between;align-items:flex-end;gap:20px;flex-wrap:wrap}
+.chips{display:flex;gap:8px;flex-wrap:wrap}
+.chip{font:500 14px 'DM Sans',sans-serif;padding:9px 16px;border-radius:99px;border:1px solid #c9a45c66;background:#071a20b3;color:var(--text);cursor:pointer;backdrop-filter:blur(8px);transition:background .25s,color .25s}
+.chip[aria-pressed=true]{background:var(--brass);color:#1b1608;border-color:var(--brass)}
+.ctl{display:flex;align-items:center;gap:8px;font-size:14px;color:var(--mute)}
+.ctl button{width:38px;height:38px;border-radius:50%;border:1px solid #c9a45c66;background:#071a20b3;color:var(--text);font-size:20px;cursor:pointer}
+.live{position:absolute;right:var(--px);top:50%;display:flex;gap:12px;align-items:center;padding:12px 18px;border-radius:14px;background:#071a20c0;border:1px solid #e9efe91c;backdrop-filter:blur(14px);font-size:14px;transition:opacity .5s,transform .5s var(--ease)}
+.live.out{opacity:0;transform:translateY(10px)}
+.live i{width:9px;height:9px;border-radius:50%;background:#46e0b0;box-shadow:0 0 0 0 #46e0b088;animation:pulse 1.8s infinite}
+@keyframes pulse{to{box-shadow:0 0 0 10px #46e0b000}}
+.live b{display:block;font-weight:700}.live span{color:var(--mute);font-size:13px}
+.ch{min-height:100svh;display:flex;align-items:center;padding:0 var(--px)}
+.ch[data-s=r]{justify-content:flex-end}
+.card{max-width:440px;padding:30px;border-radius:22px;background:#071a20bd;border:1px solid #e9efe91f;backdrop-filter:blur(18px);box-shadow:0 30px 80px #0006;opacity:0;transform:translateY(46px) scale(.97);filter:blur(10px);transition:opacity .9s,transform .9s var(--ease),filter .9s}
+.ch.on .card{opacity:1;transform:none;filter:none}
+.card h3{font:600 clamp(28px,3.4vw,40px)/1.1 var(--serif);margin-bottom:12px}
+.card p{color:var(--mute)}
+.card ul{display:flex;flex-wrap:wrap;gap:8px;list-style:none;padding:0;margin-top:18px}
+.card li{font-size:13px;padding:5px 12px;border-radius:99px;border:1px solid #c9a45c66;color:#e9d7ae}
+#dots{position:fixed;right:20px;top:50%;transform:translateY(-50%);z-index:15;display:flex;flex-direction:column;gap:12px}
+#dots button{width:10px;height:10px;border-radius:50%;border:1.5px solid var(--brass);background:none;padding:0;cursor:pointer;transition:transform .3s,background .3s}
+#dots button[aria-current=true]{background:var(--brass);transform:scale(1.5)}
+.sol{position:relative;z-index:3;padding:100px var(--px)}
+h2{font:600 clamp(32px,4.2vw,54px)/1.08 var(--serif);letter-spacing:-.015em;max-width:20ch}
+.roles{background:var(--sand);color:#1c2a2c}
+.roles .lead{margin-top:16px;max-width:52ch;color:#4b5b5b}
+.rg{display:grid;grid-template-columns:repeat(auto-fit,minmax(250px,1fr));gap:16px;margin-top:48px}
+.role{padding:22px;border-radius:16px;background:#fff8;border:1px solid #1c2a2c1f;opacity:0;transform:translateY(26px);transition:opacity .7s calc(var(--i)*.08s),transform .7s calc(var(--i)*.08s) var(--ease),background .3s}
+.in .role{opacity:1;transform:none}
+.in .role:hover{background:#fff;transform:translateY(-6px);transition-delay:0s}
+.role h3{font:600 23px var(--serif);margin-bottom:4px}
+.role p{font-size:15px;color:#485858}
+.br{background:var(--lagoon);display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:56px;align-items:center}
+.br p{color:var(--mute);margin:20px 0 28px;max-width:46ch}
+.pick{background:#f7f1e6;color:#1c2a2c;border-radius:18px;padding:26px;box-shadow:0 30px 60px #0007;transition:transform .3s}
+.pick h4{font:600 22px var(--serif);margin-bottom:4px}
+.pick small{color:#6a7a7a;display:block;margin-bottom:12px}
+.row{display:flex;align-items:center;justify-content:space-between;gap:16px;padding:14px 0;border-top:1px solid #1c2a2c22}
+.row b{display:block;font-weight:700}.row span{font-size:13px;color:#6a7a7a}
+.bar{width:90px;height:6px;border-radius:9px;background:#1c2a2c1c;overflow:hidden;flex:none}
+.bar i{display:block;height:100%;width:0;background:#2a8c82;transition:width 1.4s .2s var(--ease)}
+.in .bar i{width:var(--w)}
+.cta{background:var(--brass);color:#1b1608;display:flex;justify-content:space-between;align-items:center;gap:28px;flex-wrap:wrap}
+.cta .btn{background:#1b1608;color:#f7f1e6;border-color:#1b1608}
+.cta .btn.g{background:none;color:#1b1608}
+footer{position:relative;z-index:3;background:var(--ink);padding:36px var(--px);display:flex;justify-content:space-between;gap:16px;flex-wrap:wrap;color:var(--mute);font-size:14px}
+@media(max-width:800px){nav .links a:not(.btn){display:none}.hero{padding-top:96px}.live,#dots{display:none}.ch{align-items:flex-end;padding-bottom:36px}.card{max-width:none}.sol{padding:72px 20px}}
+.auth-modal{position:fixed;inset:0;z-index:120;display:grid;place-items:center;padding:20px;opacity:0;visibility:hidden;transition:opacity .28s,visibility .28s}
+.auth-modal.is-open{opacity:1;visibility:visible}
+.auth-backdrop{position:absolute;inset:0;width:100%;height:100%;border:0;background:#0312169c;backdrop-filter:blur(5px);cursor:pointer}
+.auth-dialog{position:relative;z-index:1;width:min(100%,480px);max-height:calc(100dvh - 40px);overflow:auto;overscroll-behavior:contain;border:1px solid #e9efe92c;border-radius:24px;background:linear-gradient(145deg,#17363def,#091b20f5);box-shadow:0 32px 100px #0009;transform:translateY(24px) scale(.975);transition:transform .48s var(--ease)}
+.auth-modal.is-open .auth-dialog{transform:none}
+.auth-dialog-head{position:absolute;top:14px;right:14px;z-index:2}
+.auth-close{display:grid;width:40px;height:40px;place-items:center;border:1px solid #e9efe930;border-radius:50%;background:#071a208c;color:var(--text);font:400 25px/1 'DM Sans',sans-serif;cursor:pointer;backdrop-filter:blur(8px)}
+.auth-close:hover{background:var(--brass);color:#1b1608}
+.auth-frame{display:block;width:100%;height:min(640px,calc(100dvh - 40px));border:0;background:transparent}
+.auth-modal.is-register .auth-frame{height:min(720px,calc(100dvh - 40px))}
+@media(max-width:520px){.auth-modal{padding:10px}.auth-dialog{max-height:calc(100dvh - 20px);border-radius:20px}.auth-frame,.auth-modal.is-register .auth-frame{height:calc(100dvh - 20px)}}
+@media(prefers-reduced-motion:reduce){*,::before,::after{animation:none!important;transition-duration:.01ms!important}html{scroll-behavior:auto}.card,.role{opacity:1;transform:none;filter:none}.bar i{width:var(--w)}}
+</style>
+<noscript><style>.page-shell{opacity:1!important;transform:none!important}.loader{display:none!important}.card,.role{opacity:1;transform:none;filter:none}</style></noscript>
+</head>
+<body class="is-loading">
+<div class="loader" id="page-loader" role="status" aria-live="polite" aria-label="Loading Bonete's Hotel">
+  <div class="loader-content">
+    <div class="loader-emblem" aria-hidden="true"><span class="loader-mark"></span></div>
+    <p class="loader-name" data-brand>Bonete's Hotel</p>
+    <p class="loader-caption">Your stay, seamlessly managed</p>
+    <div class="loader-progress" aria-hidden="true"><span></span></div>
+    <p class="loader-status">Preparing your front desk</p>
+  </div>
+</div>
+<div id="bar"></div>
+<div id="stage" aria-label="Interactive 3D model of a hotel"></div>
+<div class="shade" id="shade"></div>
+<div class="page-shell">
+<nav>
+  <a class="brand" href="#top"><i></i><span data-brand>Bonete's Hotel</span></a>
+  <div class="links"><a href="#story">Features</a><a href="#roles">Roles</a><a href="#branches">Branches</a><a class="btn g" data-auth="login" href="/login">Log in</a><a class="btn p" data-auth="register" href="/register">Sign up</a></div>
+</nav>
+<div id="dots" aria-label="Tour chapters"></div>
+
+<main id="story">
+<header class="hero step" id="top" data-v="all" data-s="l">
+  <div class="copy">
+    <h1 id="h1">Every branch, one front desk.</h1>
+    <p>Reservations, rooms, billing and housekeeping stay in step across all your properties. Log in, choose a branch, and get to work.</p>
+    <div class="btns"><a class="btn p" data-auth="login" href="/login">Log in to your branch</a><a class="btn g" data-auth="register" href="/register">Create your account</a><a class="btn g" href="#story-1">Take the tour</a></div>
+  </div>
+  <div class="live out" id="live" aria-hidden="true"><i></i><div><b id="lb"></b><span id="ls"></span></div></div>
+  <div class="tour">
+    <div class="chips" id="chips" role="group" aria-label="Look around the hotel"></div>
+    <div class="ctl"><span>Drag to look around</span><button id="zi" aria-label="Zoom in">+</button><button id="zo" aria-label="Zoom out">−</button></div>
+  </div>
+</header>
+
+<section class="ch step" id="story-1" data-v="lobby" data-s="l" data-t="Front desk"><div class="card"><h3>Check-ins in a few taps</h3><p>Arrivals, departures and walk-ins are handled from one screen, with every guest folio a tap away.</p><ul><li>Walk-ins</li><li>ID and notes</li><li>Take payment</li></ul></div></section>
+<section class="ch step" data-v="rooms" data-s="r" data-t="Reservations"><div class="card"><h3>One calendar, no double-bookings</h3><p>Move a guest to another room, extend a stay, or split a group. Rates and availability stay in step with your booking sites.</p><ul><li>Drag and drop</li><li>Group bookings</li><li>Online channels</li></ul></div></section>
+<section class="ch step" data-v="wing" data-s="l" data-t="Housekeeping"><div class="card"><h3>Rooms ready the moment they’re clean</h3><p>Housekeepers update each room from their phone, and the front desk sees it live. Nobody waits on a room that’s already ready.</p><ul><li>Assigned rooms</li><li>Inspections</li><li>Repair requests</li></ul></div></section>
+<section class="ch step" data-v="pool" data-s="r" data-t="Billing"><div class="card"><h3>Every charge lands on the folio</h3><p>Restaurant, spa, pool bar and minibar charges post straight to the guest’s room. Print the invoice and close the day with one report.</p><ul><li>Room charges</li><li>Invoices</li><li>Daily close</li></ul></div></section>
+<section class="ch step" data-v="roof" data-s="l" data-t="Reports"><div class="card"><h3>Know how every branch is doing</h3><p>Occupancy, average rate and revenue for one branch or all of them, ready each morning on any device.</p><ul><li>Occupancy</li><li>Revenue</li><li>By branch</li></ul></div></section>
+</main>
+
+<section class="sol roles rv" id="roles">
+  <h2>A view for every role.</h2>
+  <p class="lead">Each person sees only what their job needs, at only the branches they work in.</p>
+  <div class="rg">
+    <div class="role" style="--i:0"><h3>Owner</h3><p>All branches, users, settings and reports.</p></div>
+    <div class="role" style="--i:1"><h3>Branch manager</h3><p>Full control of one branch, plus approvals for discounts and refunds.</p></div>
+    <div class="role" style="--i:2"><h3>Front desk</h3><p>Bookings, check-in and check-out, folios and payments.</p></div>
+    <div class="role" style="--i:3"><h3>Cashier</h3><p>Billing, invoices, the daily close and financial reports.</p></div>
+    <div class="role" style="--i:4"><h3>Housekeeping</h3><p>Only their assigned rooms, with one tap to mark them clean.</p></div>
+    <div class="role" style="--i:5"><h3>Maintenance</h3><p>Repair requests and their status, nothing more.</p></div>
+  </div>
+</section>
+
+<section class="sol br rv" id="branches">
+  <div>
+    <h2>One login. Every branch.</h2>
+    <p>Owners and managers sign in once and pick the property they’re working on. Staff see only the branches they’re assigned to.</p>
+    <a class="btn p" data-auth="login" href="/login">Log in and choose a branch</a>
+  </div>
+  <div class="pick" aria-label="Sample branch picker">
+    <h4>Choose a branch</h4><small>Sample view</small>
+    <div class="row"><div><b>Downtown</b><span><i data-n="38">0</i> of 46 rooms occupied</span></div><div class="bar" style="--w:82%"><i></i></div></div>
+    <div class="row"><div><b>Lakeside</b><span><i data-n="21">0</i> of 33 rooms occupied</span></div><div class="bar" style="--w:64%"><i></i></div></div>
+    <div class="row"><div><b>Airport</b><span><i data-n="29">0</i> of 32 rooms occupied</span></div><div class="bar" style="--w:91%"><i></i></div></div>
+  </div>
+</section>
+
+<section class="sol cta">
+  <h2>Ready to open the front desk?</h2>
+  <div class="btns"><a class="btn" data-auth="register" href="/register">Create an account</a><a class="btn g" data-auth="login" href="/login">Log in</a></div>
+</section>
+
+<footer><span>© <span id="yr"></span> <span data-brand>Bonete's Hotel</span>. All rights reserved.</span><span>Support · Privacy · Terms</span></footer>
+</div>
+
+<div class="auth-modal" id="auth-modal" aria-hidden="true">
+  <button class="auth-backdrop" type="button" data-auth-close aria-label="Close sign in dialog"></button>
+  <section class="auth-dialog" role="dialog" aria-modal="true" aria-label="Sign in or create an account">
+    <div class="auth-dialog-head"><button class="auth-close" type="button" data-auth-close aria-label="Close dialog">×</button></div>
+    <iframe class="auth-frame" id="auth-frame" title="Sign in" src="about:blank"></iframe>
+  </section>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script>
+/* ---- Edit these two values, then everything else follows ---- */
+const CFG={brand:'Bonete\'s Hotel',loginUrl:'/login'};
+document.title=CFG.brand+': hotel management for every branch';
+document.querySelectorAll('[data-auth="login"]').forEach(a=>a.href=CFG.loginUrl);
+document.querySelectorAll('[data-brand]').forEach(e=>e.textContent=CFG.brand);
+document.getElementById('yr').textContent=new Date().getFullYear();
+const $=s=>document.querySelector(s),$$=s=>[...document.querySelectorAll(s)];
+
+/* headline: split into words for the reveal */
+const h1=$('#h1');h1.innerHTML=h1.textContent.split(' ').map((w,i)=>`<span class="w"><span style="--i:${i}">${w}</span></span>`).join(' ');
+
+/* auth routes + modal (unchanged behaviour) */
+const warmAuthRoutes=()=>{for(const path of ['/login','/register']){void fetch(path,{credentials:'same-origin'}).then(r=>{if(!r.ok)throw new Error(`Auth route warm-up failed for ${path}: ${r.status}`);return r.arrayBuffer()}).catch(e=>console.warn('Unable to warm auth route',e))}};
+addEventListener('load',()=>{if('requestIdleCallback' in window)requestIdleCallback(warmAuthRoutes,{timeout:1500});else setTimeout(warmAuthRoutes,500)},{once:true});
+const authModal=$('#auth-modal'),authFrame=$('#auth-frame'),authClose=authModal.querySelector('.auth-close');let lastAuthTrigger=null;
+const closeAuth=()=>{if(!authModal.classList.contains('is-open'))return;authModal.classList.remove('is-open','is-register');authModal.setAttribute('aria-hidden','true');document.body.classList.remove('auth-open');authFrame.src='about:blank';if(lastAuthTrigger)lastAuthTrigger.focus()};
+const openAuth=(mode,trigger)=>{lastAuthTrigger=trigger;authModal.classList.toggle('is-register',mode==='register');authModal.classList.add('is-open');authModal.setAttribute('aria-hidden','false');document.body.classList.add('auth-open');authFrame.title=mode==='register'?'Create your organization':'Sign in';authFrame.src=mode==='register'?'/register':'/login';authClose.focus()};
+$$('[data-auth]').forEach(l=>l.addEventListener('click',e=>{e.preventDefault();openAuth(l.dataset.auth,l)}));
+$$('[data-auth-close]').forEach(b=>b.addEventListener('click',closeAuth));
+document.addEventListener('keydown',e=>{if(e.key==='Escape')closeAuth()});
+function setAuthRoute(path){const reg=path==='/register';authModal.classList.toggle('is-register',reg);authFrame.title=reg?'Create your organization':'Sign in';authModal.querySelector('.auth-dialog').setAttribute('aria-label',authFrame.title)}
+authFrame.addEventListener('load',()=>{setAuthRoute(authFrame.contentWindow.location.pathname)});
+addEventListener('message',e=>{if(e.origin!==location.origin||e.source!==authFrame.contentWindow)return;if(e.data?.type==='pms:auth-route')setAuthRoute(e.data.path);if(e.data?.type==='pms:auth-success')location.assign('/dashboard')});
+
+/* loader */
+const enterPage=()=>setTimeout(()=>{document.body.classList.remove('is-loading');const l=$('#page-loader');l.classList.add('is-leaving');l.setAttribute('aria-hidden','true');setTimeout(()=>l.remove(),800);startLive()},350);
+if(document.readyState==='complete')enterPage();else addEventListener('load',enterPage,{once:true});
+
+/* live activity ticker */
+const msgs=[['Room 304 checked in','Downtown'],['Room 12 marked clean','Lakeside'],['Invoice paid at the desk','Airport'],['New booking from the website','Downtown'],['Late check-out approved','Lakeside']];
+let mi=0;function startLive(){const L=$('#live'),b=$('#lb'),s=$('#ls');const show=()=>{const m=msgs[mi++%msgs.length];b.textContent=m[0];s.textContent=m[1];L.classList.remove('out');setTimeout(()=>L.classList.add('out'),3000)};setTimeout(()=>{show();setInterval(show,4200)},1800)}
+
+/* scroll progress, reveals, count-up, tilt */
+const bar=$('#bar');addEventListener('scroll',()=>{bar.style.transform=`scaleX(${scrollY/(document.documentElement.scrollHeight-innerHeight||1)})`},{passive:true});
+const io=new IntersectionObserver(es=>es.forEach(e=>{if(!e.isIntersecting)return;e.target.classList.add('in');e.target.querySelectorAll('[data-n]').forEach(n=>{const t=+n.dataset.n,s=performance.now();(function f(now){const p=Math.min(1,(now-s)/1400);n.textContent=Math.round(t*(1-Math.pow(1-p,3)));if(p<1)requestAnimationFrame(f)})(s)});io.unobserve(e.target)}),{threshold:.25});
+$$('.rv').forEach(el=>io.observe(el));
+const pk=$('.pick');pk.addEventListener('pointermove',e=>{const r=pk.getBoundingClientRect(),x=(e.clientX-r.left)/r.width-.5,y=(e.clientY-r.top)/r.height-.5;pk.style.transform=`perspective(900px) rotateY(${x*10}deg) rotateX(${-y*10}deg)`});
+pk.addEventListener('pointerleave',()=>pk.style.transform='');
+
+/* 3D hotel, driven by scroll chapters */
+(()=>{
+const st=$('#stage');let R;
+try{R=new THREE.WebGLRenderer({antialias:true})}catch(e){return}
+R.setPixelRatio(Math.min(devicePixelRatio,2));st.appendChild(R.domElement);
+const S=new THREE.Scene();S.background=new THREE.Color(0x071a20);S.fog=new THREE.Fog(0x071a20,50,115);
+const C=new THREE.PerspectiveCamera(42,1,.1,300);
+S.add(new THREE.HemisphereLight(0x9fc4d0,0x10242b,.85));
+const sun=new THREE.DirectionalLight(0xffd7a6,.9);sun.position.set(14,24,18);S.add(sun);
+const M=(c,e,i)=>new THREE.MeshStandardMaterial({color:c,roughness:.6,metalness:.1,emissive:e||0,emissiveIntensity:i||1});
+const B=(w,h,d,x,y,z,m)=>{const o=new THREE.Mesh(new THREE.BoxGeometry(w,h,d),m);o.position.set(x,y,z);S.add(o);return o};
+B(100,.2,100,0,-.1,0,M(0x0b222a));B(16,3,11,0,1.5,0,M(0xe6dccb));B(8,14,6,0,10,0,M(0xcfc3ad));
+B(8.6,.35,6.6,0,17.1,0,M(0xc9a45c,0x5a4418,.6));B(4.6,1.2,2.6,0,17.9,0,M(0x2fd3c4,0x2fd3c4,.7));
+B(12,1.8,.15,0,1.6,5.5,M(0xffd9a0,0xffb877,1));B(6,6,7,13,3,0,M(0xbfb39b));
+B(14,.1,9,-16,.05,4,M(0xd9ceb8));B(7,.12,4,-16,.12,4,M(0x2fd3c4,0x1aa597,.9));B(110,.05,4,0,.03,13,M(0x142a31));
+const lit=M(0xffc27a,0xffb060,1),dim=M(0x1d3c47,0x0b1c22,.4),wg=new THREE.BoxGeometry(1,1,1),WN=[];
+const win=(x,y,z,sx,sz)=>{const o=new THREE.Mesh(wg,Math.random()<.55?lit:dim);o.scale.set(sx,.7,sz);o.position.set(x,y,z);S.add(o);WN.push(o)};
+for(let i=0;i<10;i++){const y=4.2+i*1.3;
+  for(let j=0;j<5;j++){const x=-3+j*1.5;win(x,y,3.02,.8,.06);win(x,y,-3.02,.8,.06)}
+  for(let j=0;j<4;j++){const z=-2.25+j*1.5;win(4.02,y,z,.06,.8);win(-4.02,y,z,.06,.8)}}
+for(let i=0;i<4;i++)for(let j=0;j<4;j++)win(10.9+j*1.4,1.2+i*1.3,3.52,.8,.06);
+const tm=M(0x1f5a48),tk=M(0x4a3a2a);
+for(let i=0;i<26;i++){const a=i*2.399,r=26+(i%5)*3.2,x=Math.cos(a)*r,z=Math.sin(a)*r;
+  const c=new THREE.Mesh(new THREE.ConeGeometry(1.6,4.2,7),tm);c.position.set(x,2.6,z);S.add(c);B(.3,1,.3,x,.5,z,tk)}
+const cars=[B(2.4,.8,1.1,-50,.5,12.2,M(0xc9a45c,0xc9a45c,.5)),B(2.4,.8,1.1,50,.5,14,M(0xe9efe9,0xffffff,.4))];
+const sp=[];for(let i=0;i<350;i++){const a=Math.random()*6.28,e=Math.random()*1.2+.15,r=140;sp.push(Math.cos(a)*Math.cos(e)*r,Math.sin(e)*r,Math.sin(a)*Math.cos(e)*r)}
+const sg=new THREE.BufferGeometry();sg.setAttribute('position',new THREE.Float32BufferAttribute(sp,3));
+S.add(new THREE.Points(sg,new THREE.PointsMaterial({color:0xffffff,size:.7,fog:false})));
+
+const f=innerWidth<700?1.5:1,K=['t','p','r','x','y','z','o'];
+const views={
+ all:{n:'Overview',t:.6,p:1.25,r:44,x:0,y:8,z:0,sky:0x071a20},
+ lobby:{n:'Lobby',t:0,p:1.4,r:17,x:0,y:2,z:4,sky:0x2a1f2e},
+ rooms:{n:'Rooms',t:.75,p:1.3,r:28,x:0,y:10,z:0,sky:0x0b2a36},
+ wing:{n:'Wing',t:.5,p:1.25,r:20,x:13,y:3,z:0,sky:0x14302a},
+ pool:{n:'Pool',t:.3,p:1.15,r:17,x:-16,y:0,z:4,sky:0x0d3a44},
+ roof:{n:'Rooftop',t:-.8,p:1.0,r:15,x:0,y:17,z:0,sky:0x1a1038}
+};
+const V={...views.all,o:.17},G={...V},sky=new THREE.Color(views.all.sky),skyT=sky.clone();let cur='all';
+const chips=$('#chips'),shade=$('#shade'),steps=$$('.step'),dots=$('#dots');
+const go=(k,right)=>{cur=k;const v=views[k];K.slice(0,6).forEach(n=>G[n]=v[n]);G.r=v.r*f;G.o=right?-.17:.17;skyT.setHex(v.sky);shade.classList.toggle('r',!!right);
+  [...chips.children].forEach(b=>b.setAttribute('aria-pressed',b.dataset.k===k));[...dots.children].forEach((d,i)=>d.setAttribute('aria-current',steps[i+1]?.dataset.v===k))};
+Object.keys(views).forEach(k=>{const b=document.createElement('button');b.className='chip';b.dataset.k=k;b.textContent=views[k].n;b.onclick=()=>go(k);chips.appendChild(b)});
+steps.slice(1).forEach(s=>{const d=document.createElement('button');d.setAttribute('aria-label',s.dataset.t);d.onclick=()=>s.scrollIntoView({behavior:'smooth',block:'center'});dots.appendChild(d)});
+go('all');
+const so=new IntersectionObserver(es=>es.forEach(e=>{if(e.isIntersecting){steps.forEach(s=>s.classList.toggle('on',s===e.target));go(e.target.dataset.v,e.target.dataset.s==='r')}}),{rootMargin:'-45% 0px -45% 0px'});
+steps.forEach(s=>so.observe(s));
+const zoom=m=>G.r=Math.min(70,Math.max(9,G.r*m));$('#zi').onclick=()=>zoom(.8);$('#zo').onclick=()=>zoom(1.25);
+
+const cv=R.domElement;let drag=0,lx=0,ly=0;cv.style.touchAction='pan-y';
+cv.onpointerdown=e=>{drag=1;lx=e.clientX;ly=e.clientY;cv.setPointerCapture(e.pointerId)};
+cv.onpointermove=e=>{if(!drag)return;G.t-=(e.clientX-lx)*.006;if(e.pointerType!=='touch')G.p=Math.min(1.5,Math.max(.7,G.p-(e.clientY-ly)*.004));lx=e.clientX;ly=e.clientY};
+cv.onpointerup=cv.onpointercancel=()=>drag=0;
+let W=1,H=1;const rs=()=>{W=st.clientWidth;H=st.clientHeight;R.setSize(W,H);C.aspect=W/H;C.updateProjectionMatrix()};
+new ResizeObserver(rs).observe(st);rs();
+let on=true;new IntersectionObserver(e=>on=e[0].isIntersecting).observe($('#story'));
+const rm=matchMedia('(prefers-reduced-motion:reduce)').matches;
+if(!rm)setInterval(()=>{for(let i=0;i<4;i++){const w=WN[Math.random()*WN.length|0];w.material=w.material===lit?dim:lit}},500);
+(function tick(){
+  if(on){
+    if(cur==='all'&&!drag&&!rm)G.t+=.0015;
+    K.forEach(n=>V[n]+=(G[n]-V[n])*.06);
+    sky.lerp(skyT,.03);S.background.copy(sky);S.fog.color.copy(sky);
+    if(!rm)cars.forEach((c,i)=>{c.position.x+=i?-.18:.14;if(c.position.x>55)c.position.x=-55;if(c.position.x<-55)c.position.x=55});
+    const s=Math.sin(V.p);
+    C.position.set(V.x+V.r*s*Math.sin(V.t),V.y+V.r*Math.cos(V.p),V.z+V.r*s*Math.cos(V.t));
+    C.lookAt(V.x,V.y,V.z);
+    if(W>900)C.setViewOffset(W,H,-W*V.o,0,W,H);else C.clearViewOffset();
+    R.render(S,C);
+  }
+  requestAnimationFrame(tick);
+})();
+})();
+</script>
+</body>
+</html>

@@ -19,6 +19,7 @@ import { badRequest, conflict, notFound } from '../../common/http/errors';
 import { emptyToNull } from '../../common/text/text';
 import { PrismaService, Tx } from '../../database/prisma/prisma.service';
 import { AuditService } from '../audit/audit.service';
+import { RealtimeService } from '../realtime/realtime.service';
 import { orderForDisplay } from './folio-display';
 import { FolioLedger } from './folio-ledger.service';
 
@@ -37,6 +38,7 @@ export class FoliosService {
     private readonly prisma: PrismaService,
     private readonly ledger: FolioLedger,
     private readonly audit: AuditService,
+    private readonly realtime: RealtimeService,
   ) {}
 
   // ================================================================ read
@@ -72,7 +74,7 @@ export class FoliosService {
       }
       await tx.folioItem.createMany({ data: rows });
       await this.audit.record(tx, { organizationId: r.organizationId, actorId: access.userId, propertyId: r.propertyId, action: 'folio.charge_posted', entity: 'folio', entityId: folio.id, after: { reservation: r.code, description: dto.description, amount: money(amount, r.currency) } });
-      return this.view(tx, r);
+      return this.view(tx, r, true);
     });
   }
 
@@ -90,7 +92,7 @@ export class FoliosService {
         select: { id: true },
       });
       await this.audit.record(tx, { organizationId: r.organizationId, actorId: access.userId, propertyId: r.propertyId, action: dto.amountMinor < 0 ? 'folio.discount_posted' : 'folio.adjustment_posted', entity: 'folio', entityId: folio.id, after: { reservation: r.code, description: dto.description, amount: money(dto.amountMinor, r.currency), reason: dto.reason } });
-      return this.view(tx, r);
+      return this.view(tx, r, true);
     });
   }
 
@@ -127,7 +129,7 @@ export class FoliosService {
       rows.sort((a, b) => (a.id === reversalOfParent ? -1 : b.id === reversalOfParent ? 1 : 0));
       await tx.folioItem.createMany({ data: rows });
       await this.audit.record(tx, { organizationId: r.organizationId, actorId: access.userId, propertyId: r.propertyId, action: 'folio.item_voided', entity: 'folio_item', entityId: itemId, before: { description: item.description, amount: money(item.amountMinor, r.currency) }, after: { reason: dto.reason, linesReversed: rows.length } });
-      return this.view(tx, r);
+      return this.view(tx, r, true);
     });
   }
 
@@ -154,7 +156,7 @@ export class FoliosService {
         select: { id: true },
       });
       await this.audit.record(tx, { organizationId: r.organizationId, actorId: access.userId, propertyId: r.propertyId, action: 'payment.received', entity: 'payment', entityId: payment.id, after: { reservation: r.code, amount: money(dto.amountMinor, r.currency), method: dto.method } });
-      return this.view(tx, r);
+      return this.view(tx, r, true);
     });
   }
 
@@ -179,7 +181,7 @@ export class FoliosService {
         select: { id: true },
       });
       await this.audit.record(tx, { organizationId: r.organizationId, actorId: access.userId, propertyId: r.propertyId, action: 'payment.refunded', entity: 'refund', entityId: refund.id, before: { payment: money(payment.amountMinor, r.currency) }, after: { reservation: r.code, refunded: money(dto.amountMinor, r.currency), reason: dto.reason } });
-      return this.view(tx, r);
+      return this.view(tx, r, true);
     });
   }
 
@@ -202,7 +204,9 @@ export class FoliosService {
     return found !== null;
   }
 
-  private async view(tx: Tx, r: ReservationRow): Promise<FolioView> {
+  private async view(tx: Tx, r: ReservationRow, changed = false): Promise<FolioView> {
+    // Only a real change notifies other screens. A plain read must never emit, or screens would refetch forever.
+    if (changed) this.realtime.emit(r.organizationId, 'folio.changed', r.propertyId, [r.id]);
     const folio = await tx.folio.findFirst({
       where: { reservationId: r.id },
       include: {

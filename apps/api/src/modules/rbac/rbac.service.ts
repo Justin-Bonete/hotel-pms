@@ -2,7 +2,7 @@ import { HttpStatus, Injectable } from '@nestjs/common';
 import { OrganizationStatus, UserStatus } from '@prisma/client';
 import { AccessContext, RoleGrant } from '../../common/access/access-context';
 import { AppException } from '../../common/http/app-exception';
-import { PrismaService } from '../../database/prisma/prisma.service';
+import { PrismaService, Tx } from '../../database/prisma/prisma.service';
 import { RbacRepository } from './rbac.repository';
 
 @Injectable()
@@ -43,5 +43,12 @@ export class RbacService {
       isSystem: r.isSystem,
       permissions: r.permissions.map((rp) => rp.permission.key).sort(),
     }));
+  }
+
+  /** Staff who can be given work of a kind at a property (housekeeping.work, maintenance.work...). Runs inside the caller's transaction. */
+  async assignableStaff(tx: Tx, propertyId: string, permissionKey: string): Promise<Array<{ id: string; name: string }>> {
+    const property = await tx.property.findFirst({ where: { id: propertyId, deletedAt: null }, select: { groupId: true } });
+    const users = await this.repo.usersWithPermission(tx, propertyId, property?.groupId ?? null, permissionKey);
+    return users.map((u) => ({ id: u.id, name: `${u.firstName} ${u.lastName}` }));
   }
 }

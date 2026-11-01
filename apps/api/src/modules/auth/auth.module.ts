@@ -40,6 +40,6 @@ import { JWT_ISSUER, TokenService } from './token.service';
     { provide: APP_GUARD, useClass: JwtAuthGuard },
     { provide: APP_GUARD, useClass: PermissionsGuard },
   ],
-  exports: [TokenService],
+  exports: [TokenService, AuthRepository, PasswordService],
 })
 export class AuthModule {}

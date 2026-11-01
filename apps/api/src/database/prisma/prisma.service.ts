@@ -1,5 +1,6 @@
 import { HttpStatus, Inject, Injectable, Logger, OnModuleDestroy, OnModuleInit } from '@nestjs/common';
 import { Prisma, PrismaClient } from '@prisma/client';
+import { AsyncLocalStorage } from 'node:async_hooks';
 import { RequestContextStore } from '../../common/context/request-context';
 import { AppException } from '../../common/http/app-exception';
 import { ENV } from '../../config/config.module';
@@ -24,6 +25,7 @@ export type Tx = Prisma.TransactionClient;
 @Injectable()
 export class PrismaService extends PrismaClient implements OnModuleInit, OnModuleDestroy {
   private readonly logger = new Logger(PrismaService.name);
+  private readonly commitQueue = new AsyncLocalStorage<Array<() => void>>();
 
   constructor(@Inject(ENV) env: Env) {
     super({ datasourceUrl: env.APP_DATABASE_URL });
@@ -54,18 +56,45 @@ export class PrismaService extends PrismaClient implements OnModuleInit, OnModul
     if (!UUID.test(organizationId)) {
       throw new AppException('TENANT_CONTEXT_INVALID', 'Invalid organization context.', HttpStatus.INTERNAL_SERVER_ERROR);
     }
-    return this.$transaction(async (tx) => {
-      // is_local = true: the setting dies with the transaction, so pooled connections never leak a tenant.
-      await tx.$queryRaw`SELECT set_config('app.org_id', ${organizationId}, true)`;
-      return fn(tx);
-    });
+    return this.runCommitted(() =>
+      this.$transaction(async (tx) => {
+        // is_local = true: the setting dies with the transaction, so pooled connections never leak a tenant.
+        await tx.$queryRaw`SELECT set_config('app.org_id', ${organizationId}, true)`;
+        return fn(tx);
+      }),
+    );
+  }
+
+  /**
+   * Queue a side effect (e.g. a realtime event) to run only AFTER the surrounding forTenant/withoutTenant
+   * transaction has committed. If it rolls back, the effect never happens. Outside a transaction it runs now.
+   */
+  afterCommit(effect: () => void): void {
+    const queue = this.commitQueue.getStore();
+    if (queue) queue.push(effect);
+    else effect();
+  }
+
+  private async runCommitted<T>(work: () => Promise<T>): Promise<T> {
+    const queue: Array<() => void> = [];
+    const result = await this.commitQueue.run(queue, work);
+    for (const effect of queue) {
+      try {
+        effect();
+      } catch (err) {
+        this.logger.warn(`after-commit effect failed: ${(err as Error).message}`);
+      }
+    }
+    return result;
   }
 
   withoutTenant<T>(reason: string, fn: (tx: Tx) => Promise<T>): Promise<T> {
     this.logger.debug(`RLS bypass: ${reason}`);
-    return this.$transaction(async (tx) => {
-      await tx.$queryRaw`SELECT set_config('app.bypass_rls', 'on', true)`;
-      return fn(tx);
-    });
+    return this.runCommitted(() =>
+      this.$transaction(async (tx) => {
+        await tx.$queryRaw`SELECT set_config('app.bypass_rls', 'on', true)`;
+        return fn(tx);
+      }),
+    );
   }
 }

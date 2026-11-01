@@ -1,0 +1,15 @@
+{
+  "headers": {
+    "x-nextjs-stale-time": "300",
+    "x-nextjs-prerender": "1",
+    "x-next-cache-tags": "_N_T_/layout,_N_T_/(dashboard)/layout,_N_T_/(dashboard)/reservations/layout,_N_T_/(dashboard)/reservations/page,_N_T_/reservations"
+  },
+  "routeCache": {
+    "key": "/route-cache/APP_PAGE/d18875b6042e2e7208849eff60a739d91c70adc47aa7dd8dd6009d089a611325/$/reservations",
+    "owner": {
+      "kind": "APP_PAGE",
+      "sourceRoute": "/(dashboard)/reservations/page"
+    },
+    "isFallback": false
+  }
+}

@@ -4,9 +4,11 @@ import { randomBytes } from 'node:crypto';
 import {
   ACTION_FROM,
   ACTION_RESULT,
+  READY_ROOM_STATUSES as READY_ROOM_STATUSES_SHARED,
   EDITABLE_STATUSES,
   HOLDING_STATUSES,
   formatMoney,
+  nightlyRatesFrom,
   nightsBetween,
   parseDate,
   quoteStay,
@@ -17,7 +19,7 @@ import {
   type CalendarView,
   type ReservationView,
 } from '@pms/types';
-import type { CreateReservationInput, RangeQuery, ReservationsQuery, TransitionInput, UpdateReservationInput } from '@pms/validation';
+import type { CreateReservationInput, ExtendStayInput, RangeQuery, ReservationsQuery, TransitionInput, UpdateReservationInput } from '@pms/validation';
 import type { AccessContext } from '../../common/access/access-context';
 import { assertCan } from '../../common/access/assert-access';
 import { changedFields } from '../../common/audit/changed-fields';
@@ -29,11 +31,13 @@ import { emptyToNull } from '../../common/text/text';
 import { PrismaService, Tx } from '../../database/prisma/prisma.service';
 import { AuditService } from '../audit/audit.service';
 import { FolioLedger } from '../folios/folio-ledger.service';
+import { HousekeepingAutomation } from '../housekeeping/housekeeping-automation.service';
+import { RealtimeService } from '../realtime/realtime.service';
 import { canBook, nightlyAvailability } from './availability';
 import { reservationDetailInclude, reservationInclude, toReservationView } from './reservation.mapper';
 
 const MAX_NIGHTS = 365;
-const READY_ROOM_STATUSES = ['AVAILABLE', 'INSPECTED'];
+const READY_ROOM_STATUSES: readonly string[] = READY_ROOM_STATUSES_SHARED;
 const label = (value: string): string => value.toLowerCase().replace(/_/g, ' ');
 
 @Injectable()
@@ -42,6 +46,8 @@ export class ReservationsService {
     private readonly prisma: PrismaService,
     private readonly audit: AuditService,
     private readonly ledger: FolioLedger,
+    private readonly realtime: RealtimeService,
+    private readonly housekeeping: HousekeepingAutomation,
   ) {}
 
   // ================================================================ reads
@@ -226,6 +232,7 @@ export class ReservationsService {
         entityId: row.id,
         after: { code: row.code, status: row.status, arrival: dto.arrivalDate, departure: dto.departureDate, roomType: roomType.name, totalMinor: quote.totalMinor },
       });
+      this.realtime.emit(access.organizationId, 'reservation.changed', propertyId, [row.id]);
       return toReservationView(row);
     });
   }
@@ -279,7 +286,41 @@ export class ReservationsService {
       if (diff.changed.length > 0) {
         await this.audit.record(tx, { organizationId: access.organizationId, actorId: access.userId, propertyId: r.propertyId, action: 'reservation.updated', entity: 'reservation', entityId: id, before: diff.before, after: diff.after });
       }
+      this.realtime.emit(access.organizationId, 'reservation.changed', r.propertyId, [id]);
       return toReservationView(row);
+    });
+  }
+
+  // ================================================================ extend stay
+  /** An in-house guest stays longer. The room must be free, the extra nights are priced from the rate plan and billed to the folio. */
+  async extend(id: string, dto: ExtendStayInput, access: AccessContext): Promise<ReservationView> {
+    return this.prisma.forTenant(async (tx) => {
+      const r = await tx.reservation.findFirst({ where: { id }, include: reservationDetailInclude });
+      if (!r) throw notFound('Reservation');
+      assertCan(access, 'reservation.manage', r.propertyId);
+      if (r.status !== 'CHECKED_IN' || !r.roomId) throw conflict('NOT_IN_HOUSE', 'Only a guest who is checked in can extend their stay.');
+
+      const oldDeparture = toDateString(r.departureDate);
+      if (dto.departureDate <= oldDeparture) throw badRequest('INVALID_DATES', 'The new departure must be after the current one. To leave earlier, check the guest out.');
+      if (nightsBetween(oldDeparture, dto.departureDate) > 60) throw badRequest('STAY_TOO_LONG', "A stay can't be extended by more than 60 nights at once.");
+
+      await this.ensureRoomFree(tx, { roomId: r.roomId, roomNumber: r.room?.number ?? '', arrival: oldDeparture, departure: dto.departureDate, excludeId: id });
+      const { quote } = await this.resolveQuote(tx, r.propertyId, r.roomTypeId, r.roomType.name, r.ratePlanId ?? undefined, oldDeparture, dto.departureDate);
+      const extraRates = quote.perNight.map((n) => n.rateMinor);
+      const newTotal = r.totalMinor + quote.totalMinor;
+
+      const changed = await tx.reservation.updateMany({
+        where: { id, status: 'CHECKED_IN', departureDate: r.departureDate },
+        data: { departureDate: parseDate(dto.departureDate), nights: r.nights + quote.nights, totalMinor: newTotal, nightlyRates: [...nightlyRatesFrom(r.nightlyRates, r.nights, r.totalMinor), ...extraRates] },
+      });
+      if (changed.count === 0) throw conflict('RESERVATION_CHANGED', 'Someone else just changed this reservation. Refresh and try again.');
+
+      const stay = { ...this.stayForBilling(r, r.room?.number ?? ''), departureDate: parseDate(dto.departureDate), totalMinor: newTotal };
+      await this.ledger.postExtraNights(tx, stay, oldDeparture, extraRates, access.userId);
+      await this.audit.record(tx, { organizationId: access.organizationId, actorId: access.userId, propertyId: r.propertyId, action: 'reservation.extended', entity: 'reservation', entityId: id, before: { departure: oldDeparture }, after: { departure: dto.departureDate, addedNights: quote.nights, added: formatMoney(quote.totalMinor, r.currency) } });
+      this.realtime.emit(access.organizationId, 'reservation.changed', r.propertyId, [id]);
+      this.realtime.emit(access.organizationId, 'folio.changed', r.propertyId, [id]);
+      return toReservationView(await tx.reservation.findFirstOrThrow({ where: { id }, include: reservationInclude }));
     });
   }
 
@@ -420,6 +461,23 @@ export class ReservationsService {
           ...(overriddenBalance !== null ? { checkedOutWithBalance: formatMoney(overriddenBalance, r.currency) } : {}),
         },
       });
+
+      if (roomToDirty) {
+        await this.housekeeping.createCheckoutTask(tx, {
+          organizationId: access.organizationId,
+          propertyId: r.propertyId,
+          roomId: roomToDirty.id,
+          today,
+          createdById: access.userId,
+          notes: dto.action === 'check_out' ? `Guest checked out (${r.code}).` : `Guest moved to another room (${r.code}).`,
+        });
+      }
+      this.realtime.emit(access.organizationId, 'reservation.changed', r.propertyId, [id]);
+      if (['check_in', 'check_out', 'assign_room', 'unassign_room'].includes(dto.action)) {
+        const touched = [data.roomId as string | undefined, r.roomId, roomToDirty?.id].filter((x): x is string => typeof x === 'string');
+        this.realtime.emit(access.organizationId, 'room.changed', r.propertyId, [...new Set(touched)]);
+      }
+      if (dto.action === 'check_in' || dto.action === 'check_out') this.realtime.emit(access.organizationId, 'folio.changed', r.propertyId, [id]);
 
       const fresh = await tx.reservation.findFirstOrThrow({ where: { id }, include: reservationInclude });
       return toReservationView(fresh);

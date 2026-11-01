@@ -1,12 +1,13 @@
 import { Body, Controller, Get, HttpCode, Param, ParseUUIDPipe, Patch, Post, Query } from '@nestjs/common';
 import {
   createReservationSchema,
+  extendStaySchema,
   rangeQuerySchema,
   reservationsQuerySchema,
   transitionSchema,
   updateReservationSchema,
 } from '@pms/validation';
-import type { CreateReservationInput, RangeQuery, ReservationsQuery, TransitionInput, UpdateReservationInput } from '@pms/validation';
+import type { CreateReservationInput, ExtendStayInput, RangeQuery, ReservationsQuery, TransitionInput, UpdateReservationInput } from '@pms/validation';
 import type { AccessContext } from '../../common/access/access-context';
 import { ZodValidationPipe } from '../../common/pipes/zod-validation.pipe';
 import { Access, RequirePermission } from '../rbac/decorators/access.decorators';
@@ -54,6 +55,13 @@ export class ReservationsController {
     @Access() access: AccessContext,
   ) {
     return this.reservations.transition(id, dto, access);
+  }
+
+  @RequirePermission('reservation.manage')
+  @HttpCode(200)
+  @Post('reservations/:id/extend')
+  extend(@Param('id', ParseUUIDPipe) id: string, @Body(new ZodValidationPipe(extendStaySchema)) dto: ExtendStayInput, @Access() access: AccessContext) {
+    return this.reservations.extend(id, dto, access);
   }
 
   @RequirePermission('reservation.read')

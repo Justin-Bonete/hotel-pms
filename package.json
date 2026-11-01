@@ -17,7 +17,7 @@
     "db:rls": "pnpm --filter @pms/api db:rls",
     "db:seed": "pnpm build:packages && pnpm --filter @pms/api db:seed",
     "db:reset": "pnpm build:packages && pnpm --filter @pms/api db:reset",
-    "build:packages": "pnpm --filter @pms/types build && pnpm --filter @pms/validation build",
+    "build:packages": "pnpm --filter @pms/types build && pnpm --filter @pms/utils build && pnpm --filter @pms/validation build",
     "dev:api": "pnpm build:packages && pnpm --filter @pms/api dev",
     "dev:web": "pnpm build:packages && pnpm --filter @pms/web dev",
     "test:int": "pnpm build:packages && pnpm --filter @pms/api test:int"

@@ -13,6 +13,11 @@ import { BuildingsModule } from './modules/buildings/buildings.module';
 import { PropertiesModule } from './modules/properties/properties.module';
 import { PropertyGroupsModule } from './modules/property-groups/property-groups.module';
 import { FoliosModule } from './modules/folios/folios.module';
+import { FrontDeskModule } from './modules/frontdesk/frontdesk.module';
+import { HousekeepingModule } from './modules/housekeeping/housekeeping.module';
+import { MaintenanceModule } from './modules/maintenance/maintenance.module';
+import { RealtimeModule } from './modules/realtime/realtime.module';
+import { StaffModule } from './modules/staff/staff.module';
 import { TaxesModule } from './modules/taxes/taxes.module';
 import { GuestsModule } from './modules/guests/guests.module';
 import { RatesModule } from './modules/rates/rates.module';
@@ -24,7 +29,8 @@ import { MailModule } from './modules/mail/mail.module';
 @Module({
   imports: [ConfigModule, PrismaModule, RedisModule, AuditModule, MailModule, AuthModule, HealthModule,
     PropertiesModule, PropertyGroupsModule, BuildingsModule, RoomTypesModule, RoomsModule,
-    GuestsModule, RatesModule, ReservationsModule, FoliosModule, TaxesModule],
+    GuestsModule, RatesModule, ReservationsModule, FoliosModule, TaxesModule,
+    RealtimeModule, StaffModule, HousekeepingModule, MaintenanceModule, FrontDeskModule],
   providers: [
     { provide: APP_FILTER, useClass: AllExceptionsFilter },
     // Order matters: context first (outermost), then the response envelope.

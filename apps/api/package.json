@@ -23,6 +23,7 @@
     "@nestjs/jwt": "^11.0.0",
     "@nestjs/platform-express": "^11.0.0",
     "@pms/types": "workspace:*",
+    "@pms/utils": "workspace:*",
     "@pms/validation": "workspace:*",
     "@prisma/client": "^6.0.0",
     "argon2": "^0.41.1",

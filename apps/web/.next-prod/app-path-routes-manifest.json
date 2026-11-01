@@ -1,0 +1,17 @@
+{
+  "/_not-found/page": "/_not-found",
+  "/page": "/",
+  "/(auth)/login/page": "/login",
+  "/(dashboard)/[module]/page": "/[module]",
+  "/(auth)/register/page": "/register",
+  "/(dashboard)/calendar/page": "/calendar",
+  "/(dashboard)/dashboard/page": "/dashboard",
+  "/(dashboard)/guests/page": "/guests",
+  "/(auth)/forgot-password/page": "/forgot-password",
+  "/(dashboard)/rooms/page": "/rooms",
+  "/(dashboard)/properties/page": "/properties",
+  "/(dashboard)/reservations/page": "/reservations",
+  "/(dashboard)/settings/page": "/settings",
+  "/(public)/reset-password/page": "/reset-password",
+  "/(public)/verify-email/page": "/verify-email"
+}

@@ -1,0 +1,15 @@
+{
+  "headers": {
+    "x-nextjs-stale-time": "300",
+    "x-nextjs-prerender": "1",
+    "x-next-cache-tags": "_N_T_/layout,_N_T_/(dashboard)/layout,_N_T_/(dashboard)/calendar/layout,_N_T_/(dashboard)/calendar/page,_N_T_/calendar"
+  },
+  "routeCache": {
+    "key": "/route-cache/APP_PAGE/0915171296f4d657e881b0520b6cad4b25b06b4d63e4b89915b4e6fedb50316b/$/calendar",
+    "owner": {
+      "kind": "APP_PAGE",
+      "sourceRoute": "/(dashboard)/calendar/page"
+    },
+    "isFallback": false
+  }
+}

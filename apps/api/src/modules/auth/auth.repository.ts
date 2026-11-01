@@ -67,6 +67,12 @@ export class AuthRepository {
     });
   }
 
+  /** Choosing a password through an emailed link proves the person controls the address, and finishes an invitation. */
+  async activateAfterPasswordSet(tx: Tx, userId: string, at: Date): Promise<void> {
+    await tx.user.updateMany({ where: { id: userId, status: UserStatus.INVITED }, data: { status: UserStatus.ACTIVE } });
+    await tx.user.updateMany({ where: { id: userId, emailVerifiedAt: null }, data: { emailVerifiedAt: at } });
+  }
+
   setEmailVerified(tx: Tx, userId: string, at: Date) {
     return tx.user.update({ where: { id: userId }, data: { emailVerifiedAt: at }, select: { id: true } });
   }

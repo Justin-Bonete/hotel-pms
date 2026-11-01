@@ -1,11 +1,11 @@
 'use client';
 
 import type { ReservationAction, ReservationView } from '@pms/types';
-import { formatMoney } from '@pms/types';
+import { READY_ROOM_STATUSES, addDays, formatMoney } from '@pms/types';
 import { useMutation } from '@tanstack/react-query';
 import { useMemo, useState } from 'react';
 import { Modal } from '@/components/ui/modal';
-import { Alert, Badge, Button, Spinner, TextareaField } from '@/components/ui/ui';
+import { Alert, Badge, Button, Field, Spinner, TextareaField } from '@/components/ui/ui';
 import { useAccess } from '@/features/access/access-context';
 import { useRooms } from '@/features/rooms/queries';
 import { STATUS_META } from '@/features/rooms/status';
@@ -33,6 +33,8 @@ function Body({ r, onEdit }: { r: ReservationView; onEdit: (r: ReservationView) 
   const [roomId, setRoomId] = useState('');
   const [reason, setReason] = useState('');
   const [cancelling, setCancelling] = useState(false);
+  const [extending, setExtending] = useState(false);
+  const [newDeparture, setNewDeparture] = useState('');
 
   const act = useMutation({
     mutationFn: (v: { action: ReservationAction; roomId?: string; reason?: string; overrideBalance?: boolean }) => api.post(`/reservations/${r.id}/transition`, v),
@@ -44,6 +46,13 @@ function Body({ r, onEdit }: { r: ReservationView; onEdit: (r: ReservationView) 
     },
   });
 
+  const extend = useMutation({
+    mutationFn: (departureDate: string) => api.post(`/reservations/${r.id}/extend`, { departureDate }),
+    onSuccess: async () => {
+      setExtending(false);
+      await refresh();
+    },
+  });
   const manage = can('reservation.manage', r.propertyId);
   const frontDesk = can('reservation.check_in', r.propertyId);
 
@@ -52,7 +61,7 @@ function Body({ r, onEdit }: { r: ReservationView; onEdit: (r: ReservationView) 
     () =>
       (rooms.data ?? [])
         .filter((room) => room.roomTypeId === r.roomTypeId || r.status === 'CHECKED_IN')
-        .filter((room) => ['AVAILABLE', 'INSPECTED'].includes(room.status) && room.derived !== 'OCCUPIED' && room.derived !== 'DUE_OUT')
+        .filter((room) => (READY_ROOM_STATUSES as readonly string[]).includes(room.status) && room.derived !== 'OCCUPIED' && room.derived !== 'DUE_OUT')
         .sort((a, b) => a.number.localeCompare(b.number, undefined, { numeric: true })),
     [rooms.data, r.roomTypeId, r.status],
   );
@@ -117,12 +126,24 @@ function Body({ r, onEdit }: { r: ReservationView; onEdit: (r: ReservationView) 
 
       <div className="flex flex-wrap gap-2 border-t border-slate-100 pt-4">
         {r.status === 'CHECKED_IN' && frontDesk && <Button loading={act.isPending && act.variables?.action === 'check_out'} onClick={() => run('check_out')}>Check out</Button>}
+        {r.status === 'CHECKED_IN' && manage && <Button variant="secondary" onClick={() => { setNewDeparture(addDays(r.departureDate, 1)); setExtending((e) => !e); }}>Extend stay</Button>}
         {['INQUIRY', 'PENDING'].includes(r.status) && manage && <Button loading={act.isPending && act.variables?.action === 'confirm'} onClick={() => run('confirm')}>Confirm</Button>}
         {open && manage && <Button variant="secondary" onClick={() => onEdit(r)}>Edit</Button>}
         {holding && manage && <Button variant="secondary" loading={act.isPending && act.variables?.action === 'no_show'} onClick={() => run('no_show')}>No-show</Button>}
         {open && manage && <Button variant="danger" onClick={() => setCancelling((c) => !c)}>Cancel reservation</Button>}
       </div>
 
+      {extending && (
+        <div className="space-y-2 rounded-lg bg-indigo-50 p-3">
+          <Field label="New departure date" type="date" min={addDays(r.departureDate, 1)} value={newDeparture} onChange={(e) => setNewDeparture(e.target.value)} />
+          <p className="text-xs text-indigo-800">The room must be free for the extra nights. They are priced from the rate plan and added to the folio.</p>
+          {extend.error && <Alert tone="error">{extend.error.message}</Alert>}
+          <div className="flex justify-end gap-2">
+            <Button variant="secondary" onClick={() => setExtending(false)}>Cancel</Button>
+            <Button loading={extend.isPending} disabled={!newDeparture || newDeparture <= r.departureDate} onClick={() => extend.mutate(newDeparture)}>Extend</Button>
+          </div>
+        </div>
+      )}
       {cancelling && (
         <div className="space-y-2 rounded-lg bg-red-50 p-3">
           <TextareaField label="Reason (optional)" value={reason} onChange={(e) => setReason(e.target.value)} maxLength={300} />

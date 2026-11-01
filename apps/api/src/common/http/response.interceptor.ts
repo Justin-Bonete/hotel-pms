@@ -1,4 +1,5 @@
 import { CallHandler, ExecutionContext, Injectable, NestInterceptor } from '@nestjs/common';
+import { Reflector } from '@nestjs/core';
 import type { ApiMeta } from '@pms/types';
 import { Observable, map } from 'rxjs';
 
@@ -13,7 +14,11 @@ export class Paginated<T> {
 /** Every successful response becomes { data } or { data, meta }. */
 @Injectable()
 export class ResponseInterceptor implements NestInterceptor {
-  intercept(_context: ExecutionContext, next: CallHandler): Observable<unknown> {
+  constructor(private readonly reflector: Reflector) {}
+
+  intercept(context: ExecutionContext, next: CallHandler): Observable<unknown> {
+    // Server-Sent Events stream raw messages, not { data } envelopes (Nest marks @Sse handlers with '__sse__').
+    if (this.reflector.get<boolean | undefined>('__sse__', context.getHandler())) return next.handle();
     return next.handle().pipe(
       map((value: unknown) =>
         value instanceof Paginated ? { data: value.items, meta: value.meta } : { data: value ?? null },

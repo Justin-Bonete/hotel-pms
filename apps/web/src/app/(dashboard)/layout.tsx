@@ -9,12 +9,14 @@ import { Topbar } from '@/components/layout/topbar';
 import { Spinner } from '@/components/ui/ui';
 import { useAuth } from '@/features/auth/auth-context';
 import { AccessProvider } from '@/features/access/access-context';
+import { useRealtime } from '@/features/realtime/use-realtime';
 import { PropertyProvider } from '@/features/properties/property-context';
 
 export default function DashboardLayout({ children }: { children: ReactNode }) {
   const { status } = useAuth();
   const router = useRouter();
   const [drawer, setDrawer] = useState(false);
+  useRealtime();
 
   useEffect(() => {
     if (status === 'anonymous') router.replace('/login');

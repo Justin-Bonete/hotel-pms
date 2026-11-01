@@ -359,6 +359,7 @@ export class AuthService {
       if (!token) throw badToken();
       await this.repo.markTokenUsed(tx, token.id, now);
       await this.repo.setPassword(tx, token.userId, passwordHash);
+      await this.repo.activateAfterPasswordSet(tx, token.userId, now);
       const revoked = await this.repo.revokeAllForUser(tx, token.userId, now); // sign out everywhere
       await this.audit.record(tx, {
         organizationId: token.organizationId,

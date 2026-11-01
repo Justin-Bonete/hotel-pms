@@ -120,11 +120,64 @@ enum PaymentMethod {
   @@map("payment_method")
 }
 
+enum HousekeepingTaskType {
+  CHECKOUT_CLEAN
+  STAYOVER
+  DEEP_CLEAN
+
+  @@map("housekeeping_task_type")
+}
+
+enum TaskPriority {
+  LOW
+  NORMAL
+  HIGH
+  URGENT
+
+  @@map("task_priority")
+}
+
+enum HousekeepingStatus {
+  OPEN
+  ASSIGNED
+  IN_PROGRESS
+  CLEANED
+  DONE
+  CANCELLED
+
+  @@map("housekeeping_status")
+}
+
+enum MaintenanceCategory {
+  AIRCON
+  PLUMBING
+  ELECTRICAL
+  FURNITURE
+  INTERNET
+  APPLIANCE
+  STRUCTURAL
+  OTHER
+
+  @@map("maintenance_category")
+}
+
+enum MaintenanceStatus {
+  REPORTED
+  ASSIGNED
+  IN_PROGRESS
+  WAITING_PARTS
+  RESOLVED
+  CLOSED
+
+  @@map("maintenance_status")
+}
+
 // Stored statuses only. OCCUPIED / RESERVED / DUE_OUT are derived from reservations (Phase 3).
 enum RoomStatus {
   AVAILABLE
   DIRTY
   CLEANING
+  CLEAN
   INSPECTED
   OUT_OF_ORDER
   OUT_OF_SERVICE
@@ -166,6 +219,8 @@ model Organization {
   folioItems     FolioItem[]
   payments       Payment[]
   refunds        Refund[]
+  housekeepingTasks  HousekeepingTask[]
+  maintenanceTickets MaintenanceTicket[]
 
   @@map("organizations")
 }
@@ -220,6 +275,8 @@ model Property {
   reservations Reservation[]
   taxes        Tax[]
   folios       Folio[]
+  housekeepingTasks  HousekeepingTask[]
+  maintenanceTickets MaintenanceTicket[]
 
   @@unique([organizationId, slug])
   @@index([organizationId, groupId])
@@ -309,6 +366,9 @@ model User {
   authTokens      AuthToken[]
   roleAssignments UserRoleAssignment[]
   auditLogs       AuditLog[]
+  assignedTasks   HousekeepingTask[]  @relation("TaskAssignee")
+  assignedTickets MaintenanceTicket[] @relation("TicketAssignee")
+  reportedTickets MaintenanceTicket[] @relation("TicketReporter")
 
   @@index([organizationId, status])
   @@map("users")
@@ -496,6 +556,8 @@ model Room {
   roomType     RoomType     @relation(fields: [roomTypeId], references: [id])
   floor        Floor?       @relation(fields: [floorId], references: [id])
   reservations Reservation[]
+  housekeepingTasks  HousekeepingTask[]
+  maintenanceTickets MaintenanceTicket[]
 
   // Room number uniqueness among non-archived rooms is a partial unique index in prisma/sql/rls.sql.
   @@index([organizationId, propertyId, status])
@@ -743,4 +805,74 @@ model Refund {
   @@index([paymentId])
   @@index([organizationId])
   @@map("refunds")
+}
+
+// ---------------------------------------------------------------- operations (Phase 4)
+
+/// One open task per room and type is enforced by a partial unique index in prisma/sql/rls.sql.
+model HousekeepingTask {
+  id               String                   @id @default(uuid()) @db.Uuid
+  organizationId   String                   @map("organization_id") @db.Uuid
+  propertyId       String                   @map("property_id") @db.Uuid
+  roomId           String                   @map("room_id") @db.Uuid
+  type             HousekeepingTaskType
+  status           HousekeepingStatus       @default(OPEN)
+  priority         TaskPriority             @default(NORMAL)
+  assignedToId     String?                  @map("assigned_to_id") @db.Uuid
+  assignedAt       DateTime?                @map("assigned_at") @db.Timestamptz
+  estimatedMinutes Int?                     @map("estimated_minutes")
+  notes            String?
+  startedAt        DateTime?                @map("started_at") @db.Timestamptz
+  cleanedAt        DateTime?                @map("cleaned_at") @db.Timestamptz
+  completedAt      DateTime?                @map("completed_at") @db.Timestamptz
+  createdById      String?                  @map("created_by_id") @db.Uuid
+  createdAt        DateTime                 @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt        DateTime                 @updatedAt @map("updated_at") @db.Timestamptz
+
+  organization Organization @relation(fields: [organizationId], references: [id])
+  property     Property     @relation(fields: [propertyId], references: [id])
+  room         Room         @relation(fields: [roomId], references: [id])
+  assignedTo   User?        @relation("TaskAssignee", fields: [assignedToId], references: [id])
+
+  @@index([organizationId, propertyId, status])
+  @@index([roomId])
+  @@index([assignedToId])
+  @@map("housekeeping_tasks")
+}
+
+model MaintenanceTicket {
+  id             String              @id @default(uuid()) @db.Uuid
+  organizationId String              @map("organization_id") @db.Uuid
+  propertyId     String              @map("property_id") @db.Uuid
+  roomId         String?             @map("room_id") @db.Uuid
+  title          String
+  description    String?
+  category       MaintenanceCategory
+  priority       TaskPriority        @default(NORMAL)
+  status         MaintenanceStatus   @default(REPORTED)
+  /// While open, the room is held out of the available pool (room status MAINTENANCE).
+  blocksRoom     Boolean             @default(false) @map("blocks_room")
+  assignedToId   String?             @map("assigned_to_id") @db.Uuid
+  reportedById   String?             @map("reported_by_id") @db.Uuid
+  costMinor      Int                 @default(0) @map("cost_minor")
+  minutesSpent   Int                 @default(0) @map("minutes_spent")
+  partsUsed      String?             @map("parts_used")
+  resolutionNote String?             @map("resolution_note")
+  assignedAt     DateTime?           @map("assigned_at") @db.Timestamptz
+  startedAt      DateTime?           @map("started_at") @db.Timestamptz
+  resolvedAt     DateTime?           @map("resolved_at") @db.Timestamptz
+  closedAt       DateTime?           @map("closed_at") @db.Timestamptz
+  createdAt      DateTime            @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt      DateTime            @updatedAt @map("updated_at") @db.Timestamptz
+
+  organization Organization @relation(fields: [organizationId], references: [id])
+  property     Property     @relation(fields: [propertyId], references: [id])
+  room         Room?        @relation(fields: [roomId], references: [id])
+  assignedTo   User?        @relation("TicketAssignee", fields: [assignedToId], references: [id])
+  reportedBy   User?        @relation("TicketReporter", fields: [reportedById], references: [id])
+
+  @@index([organizationId, propertyId, status])
+  @@index([roomId])
+  @@index([assignedToId])
+  @@map("maintenance_tickets")
 }
