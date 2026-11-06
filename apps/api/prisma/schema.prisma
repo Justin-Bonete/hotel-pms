@@ -172,6 +172,63 @@ enum MaintenanceStatus {
   @@map("maintenance_status")
 }
 
+enum InventoryCategory {
+  FOOD
+  BEVERAGE
+  HOUSEKEEPING_SUPPLIES
+  TOILETRIES
+  LINENS
+  OFFICE_SUPPLIES
+  MAINTENANCE_MATERIALS
+
+  @@map("inventory_category")
+}
+
+enum StockMovementType {
+  OPENING
+  PURCHASE_RECEIPT
+  USAGE
+  WASTAGE
+  ADJUSTMENT
+  TRANSFER_OUT
+  TRANSFER_IN
+
+  @@map("stock_movement_type")
+}
+
+enum PurchaseStatus {
+  REQUESTED
+  APPROVED
+  REJECTED
+  PARTIALLY_RECEIVED
+  RECEIVED
+  CANCELLED
+
+  @@map("purchase_status")
+}
+
+enum InvoiceStatus {
+  UNPAID
+  PAID
+
+  @@map("invoice_status")
+}
+
+enum ExpenseCategory {
+  UTILITIES
+  PAYROLL
+  SUPPLIES
+  MAINTENANCE
+  MARKETING
+  RENT
+  INTERNET
+  TRANSPORTATION
+  INVENTORY
+  OTHER
+
+  @@map("expense_category")
+}
+
 // Stored statuses only. OCCUPIED / RESERVED / DUE_OUT are derived from reservations (Phase 3).
 enum RoomStatus {
   AVAILABLE
@@ -221,6 +278,13 @@ model Organization {
   refunds        Refund[]
   housekeepingTasks  HousekeepingTask[]
   maintenanceTickets MaintenanceTicket[]
+  suppliers          Supplier[]
+  inventoryItems     InventoryItem[]
+  stockMovements     StockMovement[]
+  purchaseOrders     PurchaseOrder[]
+  purchaseLines      PurchaseOrderLine[]
+  supplierInvoices   SupplierInvoice[]
+  expenses           Expense[]
 
   @@map("organizations")
 }
@@ -277,6 +341,10 @@ model Property {
   folios       Folio[]
   housekeepingTasks  HousekeepingTask[]
   maintenanceTickets MaintenanceTicket[]
+  stockMovements     StockMovement[]
+  purchaseOrders     PurchaseOrder[]
+  supplierInvoices   SupplierInvoice[]
+  expenses           Expense[]
 
   @@unique([organizationId, slug])
   @@index([organizationId, groupId])
@@ -294,6 +362,7 @@ model Department {
 
   organization Organization @relation(fields: [organizationId], references: [id])
   property     Property     @relation(fields: [propertyId], references: [id])
+  expenses     Expense[]
 
   @@unique([propertyId, name])
   @@index([organizationId])
@@ -875,4 +944,196 @@ model MaintenanceTicket {
   @@index([roomId])
   @@index([assignedToId])
   @@map("maintenance_tickets")
+}
+
+// ---------------------------------------------------------------- inventory, purchasing, expenses (Phase 5a)
+// Stock is a LEDGER: stock_movements can be inserted but never changed or deleted by the application.
+// On-hand stock is the sum of a property's movements. Money is whole minor units (centavos).
+
+model Supplier {
+  id             String    @id @default(uuid()) @db.Uuid
+  organizationId String    @map("organization_id") @db.Uuid
+  name           String
+  contactName    String?   @map("contact_name")
+  email          String?
+  phone          String?
+  address        String?
+  notes          String?
+  createdAt      DateTime  @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt      DateTime  @updatedAt @map("updated_at") @db.Timestamptz
+  deletedAt      DateTime? @map("deleted_at") @db.Timestamptz
+
+  organization Organization      @relation(fields: [organizationId], references: [id])
+  orders       PurchaseOrder[]
+  invoices     SupplierInvoice[]
+  expenses     Expense[]
+
+  // Name uniqueness among live suppliers is a partial unique index in prisma/sql/rls.sql.
+  @@index([organizationId])
+  @@map("suppliers")
+}
+
+/// The item catalog is shared by the whole organization (so stock can be transferred between properties).
+model InventoryItem {
+  id             String            @id @default(uuid()) @db.Uuid
+  organizationId String            @map("organization_id") @db.Uuid
+  sku            String
+  name           String
+  category       InventoryCategory
+  unit           String
+  /// Thresholds apply to each property's own stock.
+  minStock       Int               @default(0) @map("min_stock")
+  maxStock       Int               @default(0) @map("max_stock")
+  unitCostMinor  Int               @default(0) @map("unit_cost_minor")
+  createdAt      DateTime          @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt      DateTime          @updatedAt @map("updated_at") @db.Timestamptz
+  deletedAt      DateTime?         @map("deleted_at") @db.Timestamptz
+
+  organization Organization        @relation(fields: [organizationId], references: [id])
+  movements    StockMovement[]
+  orderLines   PurchaseOrderLine[]
+
+  // SKU uniqueness among live items is a partial unique index in prisma/sql/rls.sql.
+  @@index([organizationId])
+  @@map("inventory_items")
+}
+
+/// quantity is SIGNED (non-zero, checked in SQL): + adds stock, - removes it.
+model StockMovement {
+  id              String            @id @default(uuid()) @db.Uuid
+  organizationId  String            @map("organization_id") @db.Uuid
+  propertyId      String            @map("property_id") @db.Uuid
+  itemId          String            @map("item_id") @db.Uuid
+  type            StockMovementType
+  quantity        Int
+  unitCostMinor   Int?              @map("unit_cost_minor")
+  note            String?
+  /// Both legs of a transfer share this id.
+  transferId      String?           @map("transfer_id") @db.Uuid
+  purchaseOrderId String?           @map("purchase_order_id") @db.Uuid
+  createdById     String?           @map("created_by_id") @db.Uuid
+  createdAt       DateTime          @default(now()) @map("created_at") @db.Timestamptz
+
+  organization  Organization   @relation(fields: [organizationId], references: [id])
+  property      Property       @relation(fields: [propertyId], references: [id])
+  item          InventoryItem  @relation(fields: [itemId], references: [id])
+  purchaseOrder PurchaseOrder? @relation(fields: [purchaseOrderId], references: [id])
+
+  @@index([organizationId, propertyId, itemId])
+  @@index([transferId])
+  @@index([purchaseOrderId])
+  @@map("stock_movements")
+}
+
+model PurchaseOrder {
+  id            String         @id @default(uuid()) @db.Uuid
+  organizationId String        @map("organization_id") @db.Uuid
+  propertyId    String         @map("property_id") @db.Uuid
+  code          String
+  supplierId    String         @map("supplier_id") @db.Uuid
+  status        PurchaseStatus @default(REQUESTED)
+  notes         String?
+  currency      String         @db.Char(3)
+  /// Fixed when the request is made; lines are never repriced.
+  totalMinor    Int            @map("total_minor")
+  requestedById String?        @map("requested_by_id") @db.Uuid
+  requestedAt   DateTime       @default(now()) @map("requested_at") @db.Timestamptz
+  approvedById  String?        @map("approved_by_id") @db.Uuid
+  decidedAt     DateTime?      @map("decided_at") @db.Timestamptz
+  decisionNote  String?        @map("decision_note")
+  receivedAt    DateTime?      @map("received_at") @db.Timestamptz
+  createdAt     DateTime       @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt     DateTime       @updatedAt @map("updated_at") @db.Timestamptz
+
+  organization Organization        @relation(fields: [organizationId], references: [id])
+  property     Property            @relation(fields: [propertyId], references: [id])
+  supplier     Supplier            @relation(fields: [supplierId], references: [id])
+  lines        PurchaseOrderLine[]
+  invoice      SupplierInvoice?
+  movements    StockMovement[]
+
+  @@unique([organizationId, code])
+  @@index([organizationId, propertyId, status])
+  @@index([supplierId])
+  @@map("purchase_orders")
+}
+
+model PurchaseOrderLine {
+  id               String   @id @default(uuid()) @db.Uuid
+  organizationId   String   @map("organization_id") @db.Uuid
+  purchaseOrderId  String   @map("purchase_order_id") @db.Uuid
+  itemId           String   @map("item_id") @db.Uuid
+  quantity         Int
+  unitCostMinor    Int      @map("unit_cost_minor")
+  receivedQuantity Int      @default(0) @map("received_quantity")
+  createdAt        DateTime @default(now()) @map("created_at") @db.Timestamptz
+
+  organization  Organization  @relation(fields: [organizationId], references: [id])
+  purchaseOrder PurchaseOrder @relation(fields: [purchaseOrderId], references: [id])
+  item          InventoryItem @relation(fields: [itemId], references: [id])
+
+  @@unique([purchaseOrderId, itemId])
+  @@index([organizationId])
+  @@map("purchase_order_lines")
+}
+
+model SupplierInvoice {
+  id                 String        @id @default(uuid()) @db.Uuid
+  organizationId     String        @map("organization_id") @db.Uuid
+  propertyId         String        @map("property_id") @db.Uuid
+  purchaseOrderId    String        @unique @map("purchase_order_id") @db.Uuid
+  supplierId         String        @map("supplier_id") @db.Uuid
+  number             String
+  amountMinor        Int           @map("amount_minor")
+  /// Value of the goods received when the invoice was recorded (the "three-way match").
+  receivedValueMinor Int           @map("received_value_minor")
+  issuedOn           DateTime      @map("issued_on") @db.Date
+  dueOn              DateTime      @map("due_on") @db.Date
+  status             InvoiceStatus @default(UNPAID)
+  paidAt             DateTime?     @map("paid_at") @db.Timestamptz
+  paidMethod         PaymentMethod? @map("paid_method")
+  paidReference      String?       @map("paid_reference")
+  createdById        String?       @map("created_by_id") @db.Uuid
+  createdAt          DateTime      @default(now()) @map("created_at") @db.Timestamptz
+
+  organization  Organization  @relation(fields: [organizationId], references: [id])
+  property      Property      @relation(fields: [propertyId], references: [id])
+  purchaseOrder PurchaseOrder @relation(fields: [purchaseOrderId], references: [id])
+  supplier      Supplier      @relation(fields: [supplierId], references: [id])
+  expense       Expense?
+
+  @@index([organizationId, propertyId, status])
+  @@map("supplier_invoices")
+}
+
+model Expense {
+  id                String          @id @default(uuid()) @db.Uuid
+  organizationId    String          @map("organization_id") @db.Uuid
+  propertyId        String          @map("property_id") @db.Uuid
+  departmentId      String?         @map("department_id") @db.Uuid
+  category          ExpenseCategory
+  vendor            String?
+  supplierId        String?         @map("supplier_id") @db.Uuid
+  incurredOn        DateTime        @map("incurred_on") @db.Date
+  amountMinor       Int             @map("amount_minor")
+  paymentMethod     PaymentMethod   @map("payment_method")
+  reference         String?
+  note              String?
+  /// MANUAL, or PURCHASING when created by paying a supplier invoice.
+  source            String          @default("MANUAL")
+  supplierInvoiceId String?         @unique @map("supplier_invoice_id") @db.Uuid
+  voidedAt          DateTime?       @map("voided_at") @db.Timestamptz
+  voidReason        String?         @map("void_reason")
+  createdById       String?         @map("created_by_id") @db.Uuid
+  createdAt         DateTime        @default(now()) @map("created_at") @db.Timestamptz
+
+  organization    Organization     @relation(fields: [organizationId], references: [id])
+  property        Property         @relation(fields: [propertyId], references: [id])
+  department      Department?      @relation(fields: [departmentId], references: [id])
+  supplier        Supplier?        @relation(fields: [supplierId], references: [id])
+  supplierInvoice SupplierInvoice? @relation(fields: [supplierInvoiceId], references: [id])
+
+  @@index([organizationId, propertyId, incurredOn])
+  @@index([category])
+  @@map("expenses")
 }

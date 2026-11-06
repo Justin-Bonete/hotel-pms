@@ -6,3 +6,4 @@ export * from './guests';
 export * from './reservations';
 export * from './billing';
 export * from './operations';
+export * from './business';

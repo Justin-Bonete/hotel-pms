@@ -44,6 +44,16 @@ export const PERMISSION_CATALOG = [
   { key: 'maintenance.report', module: 'maintenance', level: 'PROPERTY', description: 'Report maintenance problems' },
   { key: 'maintenance.work', module: 'maintenance', level: 'PROPERTY', description: 'Work assigned maintenance tickets' },
   { key: 'maintenance.manage', module: 'maintenance', level: 'PROPERTY', description: 'Assign, close and reopen maintenance tickets' },
+  { key: 'inventory.read', module: 'inventory', level: 'PROPERTY', description: 'View stock levels and movements' },
+  { key: 'inventory.manage', module: 'inventory', level: 'PROPERTY', description: 'Manage items; record usage, wastage, adjustments; transfer stock' },
+  { key: 'purchasing.read', module: 'purchasing', level: 'PROPERTY', description: 'View suppliers, purchase orders and supplier invoices' },
+  { key: 'purchasing.manage', module: 'purchasing', level: 'PROPERTY', description: 'Manage suppliers' },
+  { key: 'purchasing.request', module: 'purchasing', level: 'PROPERTY', description: 'Request purchases' },
+  { key: 'purchasing.approve', module: 'purchasing', level: 'PROPERTY', description: 'Approve, reject or cancel purchase requests' },
+  { key: 'purchasing.receive', module: 'purchasing', level: 'PROPERTY', description: 'Receive delivered goods into stock' },
+  { key: 'purchasing.pay', module: 'purchasing', level: 'PROPERTY', description: 'Record supplier invoices and pay them' },
+  { key: 'expense.read', module: 'expense', level: 'PROPERTY', description: 'View expenses' },
+  { key: 'expense.manage', module: 'expense', level: 'PROPERTY', description: 'Record and void expenses' },
   { key: 'staff.read', module: 'staff', level: 'PROPERTY', description: 'View staff accounts' },
   { key: 'staff.manage', module: 'staff', level: 'PROPERTY', description: 'Create, edit, disable staff accounts' },
   { key: 'role.read', module: 'rbac', level: 'ORGANIZATION', description: 'View roles and permissions' },
@@ -98,6 +108,10 @@ const RESERVATION_ADMIN: readonly PermissionKey[] = [
 const OPS_ADMIN: readonly PermissionKey[] = [
   'housekeeping.read', 'housekeeping.work', 'housekeeping.manage', 'maintenance.read', 'maintenance.report', 'maintenance.work', 'maintenance.manage',
 ];
+const BUSINESS_ADMIN: readonly PermissionKey[] = [
+  'inventory.read', 'inventory.manage', 'purchasing.read', 'purchasing.manage', 'purchasing.request', 'purchasing.approve',
+  'purchasing.receive', 'purchasing.pay', 'expense.read', 'expense.manage',
+];
 const BILLING_ADMIN: readonly PermissionKey[] = [
   'folio.read', 'folio.charge', 'folio.adjust', 'folio.override_checkout', 'payment.take', 'payment.refund', 'tax.manage',
 ];
@@ -117,14 +131,14 @@ export const SYSTEM_ROLE_TEMPLATES: readonly SystemRoleTemplate[] = [
     description: 'Manages properties and staff',
     permissions: [
       'organization.read', 'property_group.read', 'property.read', 'property.update',
-      'staff.read', 'staff.manage', 'role.read', 'role.assign', 'audit.read', ...ROOM_ADMIN, ...RESERVATION_ADMIN, ...BILLING_ADMIN, ...OPS_ADMIN,
+      'staff.read', 'staff.manage', 'role.read', 'role.assign', 'audit.read', ...ROOM_ADMIN, ...RESERVATION_ADMIN, ...BILLING_ADMIN, ...OPS_ADMIN, ...BUSINESS_ADMIN,
     ],
   },
   {
     key: 'PROPERTY_MANAGER',
     name: 'Property Manager',
     description: 'Manages assigned properties',
-    permissions: ['property.read', 'property.update', 'staff.read', 'role.read', ...ROOM_ADMIN, ...RESERVATION_ADMIN, ...BILLING_ADMIN, ...OPS_ADMIN],
+    permissions: ['property.read', 'property.update', 'staff.read', 'role.read', ...ROOM_ADMIN, ...RESERVATION_ADMIN, ...BILLING_ADMIN, ...OPS_ADMIN, ...BUSINESS_ADMIN],
   },
   operational('FRONT_DESK', 'Front Desk', FRONT_DESK_PERMISSIONS),
   operational('RECEPTIONIST', 'Receptionist', FRONT_DESK_PERMISSIONS),
@@ -132,6 +146,6 @@ export const SYSTEM_ROLE_TEMPLATES: readonly SystemRoleTemplate[] = [
   operational('HOUSEKEEPER', 'Housekeeper', [...ROOM_OPERATIONS, 'housekeeping.read', 'housekeeping.work', 'maintenance.report']),
   operational('MAINTENANCE', 'Maintenance', [...ROOM_OPERATIONS, 'maintenance.read', 'maintenance.report', 'maintenance.work']),
   operational('CASHIER', 'Cashier', ['property.read', 'reservation.read', 'folio.read', 'payment.take']),
-  operational('ACCOUNTANT', 'Accountant', ['property.read', 'reservation.read', 'guest.read', 'rate.read', 'folio.read']),
-  operational('INVENTORY_MANAGER', 'Inventory Manager'),
+  operational('ACCOUNTANT', 'Accountant', ['property.read', 'reservation.read', 'guest.read', 'rate.read', 'folio.read', 'inventory.read', 'purchasing.read', 'purchasing.pay', 'expense.read', 'expense.manage']),
+  operational('INVENTORY_MANAGER', 'Inventory Manager', ['property.read', 'inventory.read', 'inventory.manage', 'purchasing.read', 'purchasing.manage', 'purchasing.request', 'purchasing.receive']),
 ];
