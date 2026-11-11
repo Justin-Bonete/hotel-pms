@@ -54,6 +54,13 @@ beforeAll(async () => {
 afterAll(async () => {
   await owner.auditLog.deleteMany({ where: { organizationId: { in: [orgA, orgB] } } });
   const orgs = { organizationId: { in: [orgA, orgB] } };
+  await owner.expense.deleteMany({ where: orgs });
+  await owner.supplierInvoice.deleteMany({ where: orgs });
+  await owner.stockMovement.deleteMany({ where: orgs });
+  await owner.purchaseOrderLine.deleteMany({ where: orgs });
+  await owner.purchaseOrder.deleteMany({ where: orgs });
+  await owner.inventoryItem.deleteMany({ where: orgs });
+  await owner.supplier.deleteMany({ where: orgs });
   await owner.housekeepingTask.deleteMany({ where: orgs });
   await owner.maintenanceTicket.deleteMany({ where: orgs });
   await owner.refund.deleteMany({ where: orgs });
@@ -246,6 +253,68 @@ describe('tenant isolation (Row-Level Security)', () => {
 
     it('tasks and tickets can never be deleted by the application role', async () => {
       await expect(asTenant(orgA, (tx) => tx.housekeepingTask.deleteMany({ where: { id: taskId } }))).rejects.toThrow();
+    });
+  });
+
+  describe('inventory, purchasing and expenses', () => {
+    let supplierId = '';
+    let itemId = '';
+    let movementId = '';
+    let orderId = '';
+
+    beforeAll(async () => {
+      supplierId = (await owner.supplier.create({ data: { organizationId: orgA, name: `Sup ${suffix}` } })).id;
+      itemId = (await owner.inventoryItem.create({ data: { organizationId: orgA, sku: `SKU-${suffix}`, name: 'Towel', category: 'LINENS', unit: 'pcs', minStock: 5, maxStock: 20 } })).id;
+      movementId = (await owner.stockMovement.create({ data: { organizationId: orgA, propertyId: propA, itemId, type: 'OPENING', quantity: 10 } })).id;
+      orderId = (await owner.purchaseOrder.create({ data: { organizationId: orgA, propertyId: propA, code: `PO-T${suffix}`, supplierId, currency: 'PHP', totalMinor: 1000, lines: { create: [{ organizationId: orgA, itemId, quantity: 4, unitCostMinor: 250 }] } } })).id;
+    });
+
+    it('is isolated per organization', async () => {
+      expect(await asTenant(orgB, (tx) => tx.stockMovement.count({ where: { id: movementId } }))).toBe(0);
+      expect(await asTenant(orgB, (tx) => tx.purchaseOrder.count({ where: { id: orderId } }))).toBe(0);
+      expect(await asTenant(orgB, (tx) => tx.supplier.count({ where: { id: supplierId } }))).toBe(0);
+      expect(await asTenant(orgA, (tx) => tx.purchaseOrder.count({ where: { id: orderId } }))).toBe(1);
+    });
+
+    it('the stock ledger is append-only for the application role', async () => {
+      await expect(asTenant(orgA, (tx) => tx.stockMovement.updateMany({ where: { id: movementId }, data: { quantity: 999 } }))).rejects.toThrow();
+      await expect(asTenant(orgA, (tx) => tx.stockMovement.deleteMany({ where: { id: movementId } }))).rejects.toThrow();
+      const added = await asTenant(orgA, (tx) => tx.stockMovement.create({ data: { organizationId: orgA, propertyId: propA, itemId, type: 'USAGE', quantity: -2 }, select: { id: true } }));
+      expect(added.id).toBeTruthy();
+    });
+
+    it('a stock movement of zero is refused, and on-hand is the sum of movements', async () => {
+      await expect(owner.stockMovement.create({ data: { organizationId: orgA, propertyId: propA, itemId, type: 'ADJUSTMENT', quantity: 0 } })).rejects.toThrow();
+      const sum = await owner.stockMovement.aggregate({ where: { propertyId: propA, itemId }, _sum: { quantity: true } });
+      expect(sum._sum.quantity).toBe(8);
+    });
+
+    it('a purchase line can never receive more than was ordered, and quantities must be positive', async () => {
+      const line = await owner.purchaseOrderLine.findFirstOrThrow({ where: { purchaseOrderId: orderId } });
+      await expect(owner.purchaseOrderLine.update({ where: { id: line.id }, data: { receivedQuantity: 5 } })).rejects.toThrow();
+      await expect(owner.purchaseOrderLine.update({ where: { id: line.id }, data: { receivedQuantity: 4 } })).resolves.toBeTruthy();
+    });
+
+    it('one invoice per purchase order, with a sensible amount and due date', async () => {
+      const make = (over: object = {}) => owner.supplierInvoice.create({ data: { organizationId: orgA, propertyId: propA, purchaseOrderId: orderId, supplierId, number: 'INV-1', amountMinor: 1000, receivedValueMinor: 1000, issuedOn: new Date('2026-11-01'), dueOn: new Date('2026-11-15'), ...over } });
+      await expect(make({ amountMinor: 0 })).rejects.toThrow();
+      await expect(make({ dueOn: new Date('2026-10-01') })).rejects.toThrow();
+      const first = await make();
+      await expect(make()).rejects.toThrow();
+      // paying twice would need two expenses for one invoice: refused by the unique link
+      await owner.expense.create({ data: { organizationId: orgA, propertyId: propA, category: 'INVENTORY', incurredOn: new Date('2026-11-02'), amountMinor: 1000, paymentMethod: 'CASH', source: 'PURCHASING', supplierInvoiceId: first.id } });
+      await expect(owner.expense.create({ data: { organizationId: orgA, propertyId: propA, category: 'INVENTORY', incurredOn: new Date('2026-11-02'), amountMinor: 1000, paymentMethod: 'CASH', source: 'PURCHASING', supplierInvoiceId: first.id } })).rejects.toThrow();
+    });
+
+    it('an expense must be above zero, and the application role can never delete one', async () => {
+      await expect(owner.expense.create({ data: { organizationId: orgA, propertyId: propA, category: 'RENT', incurredOn: new Date('2026-11-02'), amountMinor: 0, paymentMethod: 'CASH' } })).rejects.toThrow();
+      const e = await owner.expense.create({ data: { organizationId: orgA, propertyId: propA, category: 'RENT', incurredOn: new Date('2026-11-02'), amountMinor: 500, paymentMethod: 'CASH' } });
+      await expect(asTenant(orgA, (tx) => tx.expense.deleteMany({ where: { id: e.id } }))).rejects.toThrow();
+    });
+
+    it('item codes and supplier names are unique among live records, regardless of capitals', async () => {
+      await expect(owner.inventoryItem.create({ data: { organizationId: orgA, sku: `sku-${suffix}`, name: 'Dup', category: 'FOOD', unit: 'kg' } })).rejects.toThrow();
+      await expect(owner.supplier.create({ data: { organizationId: orgA, name: `SUP ${suffix}` } })).rejects.toThrow();
     });
   });
 

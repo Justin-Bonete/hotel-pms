@@ -62,8 +62,7 @@ export class PurchasingService {
   async listInvoices(propertyId: string, query: InvoicesQuery, access: AccessContext): Promise<SupplierInvoiceView[]> {
     assertCan(access, 'purchasing.read', propertyId);
     return this.prisma.forTenant(async (tx) => {
-      await this.requireProperty(tx, propertyId);
-      const today = toDateString(new Date(todayIn((await this.requireProperty(tx, propertyId)).timezone) + 'T00:00:00Z'));
+      const today = todayIn((await this.requireProperty(tx, propertyId)).timezone);
       const rows = await tx.supplierInvoice.findMany({
         where: { propertyId, ...(query.status ? { status: query.status } : {}) },
         include: { supplier: { select: { name: true } }, purchaseOrder: { select: { code: true, currency: true } } },
@@ -176,7 +175,9 @@ export class PurchasingService {
 
       const updated = order.lines.map((l) => ({ quantity: l.quantity, receivedQuantity: l.receivedQuantity + (wanted.get(l.id) ?? 0) }));
       const status = receiptStatus(updated);
-      await tx.purchaseOrder.updateMany({ where: { id, status: order.status }, data: { status, ...(status === 'RECEIVED' ? { receivedAt: new Date() } : {}) } });
+      const moved = await tx.purchaseOrder.updateMany({ where: { id, status: order.status }, data: { status, ...(status === 'RECEIVED' ? { receivedAt: new Date() } : {}) } });
+      // If someone cancelled the order a moment ago, throwing here rolls back the stock movements above.
+      if (moved.count === 0) throw conflict('ORDER_CHANGED', 'This order was just changed by someone else, so nothing was received. Refresh and try again.');
       await this.audit.record(tx, { organizationId: access.organizationId, actorId: access.userId, propertyId: order.propertyId, action: 'purchasing.received', entity: 'purchase_order', entityId: id, before: { code: order.code, status: order.status }, after: { status, received: [...wanted].map(([lineId, q]) => `${byId.get(lineId)!.item.name} x ${q}`) } });
       return (await this.views(tx, [await this.load(tx, id)]))[0]!;
     });
@@ -236,13 +237,15 @@ export class PurchasingService {
 
   private async views(tx: Tx, orders: OrderRow[]): Promise<PurchaseOrderView[]> {
     const names = await userNames(tx, orders.flatMap((o) => [o.requestedById, o.approvedById]));
+    const zones = await tx.property.findMany({ where: { id: { in: [...new Set(orders.map((o) => o.propertyId))] } }, select: { id: true, timezone: true } });
+    const todayOf = new Map<string, string>(zones.map((z) => [z.id, todayIn(z.timezone)] as [string, string]));
     return orders.map((o) => ({
       id: o.id, code: o.code, propertyId: o.propertyId, supplierId: o.supplierId, supplierName: o.supplier.name, status: o.status, notes: o.notes, currency: o.currency,
       totalMinor: o.totalMinor, receivedValueMinor: receivedValue(o.lines),
       requestedById: o.requestedById, requestedByName: o.requestedById ? (names.get(o.requestedById) ?? null) : null, requestedAt: o.requestedAt.toISOString(),
       approvedByName: o.approvedById ? (names.get(o.approvedById) ?? null) : null, decisionNote: o.decisionNote,
       lines: o.lines.map((l) => ({ id: l.id, itemId: l.itemId, itemName: l.item.name, sku: l.item.sku, unit: l.item.unit, quantity: l.quantity, unitCostMinor: l.unitCostMinor, receivedQuantity: l.receivedQuantity })),
-      invoice: o.invoice ? this.invoiceView(o.invoice, toDateString(new Date())) : null,
+      invoice: o.invoice ? this.invoiceView(o.invoice, todayOf.get(o.propertyId) ?? toDateString(new Date())) : null,
     }));
   }
 

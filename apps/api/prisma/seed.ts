@@ -390,6 +390,107 @@ async function seedOperations(organizationId: string, propertyId: string, slug: 
   }
 }
 
+// ---------------------------------------------------------------- demo suppliers, stock, purchasing, expenses
+const DEMO_SUPPLIERS = [
+  { name: 'Metro Linen Supply', contactName: 'Rica Villanueva', email: 'sales@metrolinen.example', phone: '+63 2 8555 0101' },
+  { name: 'FreshMart Foods', contactName: 'Ben Aquino', email: 'orders@freshmart.example', phone: '+63 2 8555 0102' },
+  { name: 'CleanPro Trading', contactName: 'Lea Domingo', email: 'hello@cleanpro.example', phone: '+63 2 8555 0103' },
+];
+
+// [sku, name, category, unit, min, max, unit cost in PESOS]
+const DEMO_ITEMS: Array<[string, string, 'FOOD' | 'BEVERAGE' | 'HOUSEKEEPING_SUPPLIES' | 'TOILETRIES' | 'LINENS' | 'OFFICE_SUPPLIES' | 'MAINTENANCE_MATERIALS', string, number, number, number]> = [
+  ['TWL-BATH', 'Bath towel', 'LINENS', 'pcs', 40, 120, 180],
+  ['SHT-QN', 'Bed sheet (queen)', 'LINENS', 'pcs', 30, 90, 350],
+  ['TOI-SHMP', 'Shampoo sachet', 'TOILETRIES', 'pcs', 200, 800, 6],
+  ['TOI-SOAP', 'Soap bar', 'TOILETRIES', 'pcs', 200, 800, 8],
+  ['HK-CLEAN', 'Floor cleaner', 'HOUSEKEEPING_SUPPLIES', 'L', 10, 40, 120],
+  ['FD-RICE', 'Rice', 'FOOD', 'kg', 50, 200, 55],
+  ['FD-CHKN', 'Chicken', 'FOOD', 'kg', 20, 60, 190],
+  ['BV-COFFEE', 'Coffee beans', 'BEVERAGE', 'kg', 5, 20, 650],
+  ['BV-WATER', 'Bottled water', 'BEVERAGE', 'pcs', 100, 400, 14],
+  ['OF-PAPER', 'Printer paper', 'OFFICE_SUPPLIES', 'ream', 5, 20, 260],
+  ['MT-BULB', 'LED bulb', 'MAINTENANCE_MATERIALS', 'pcs', 20, 80, 95],
+  ['MT-PAINT', 'Wall paint', 'MAINTENANCE_MATERIALS', 'L', 5, 20, 420],
+];
+
+/** Suppliers, items, opening stock (some low, one out), a few purchase orders in different states, and expenses. */
+async function seedBusiness(organizationId: string, propertyIds: Map<string, string>, staff: Map<string, string>, ownerId: string) {
+  for (const s of DEMO_SUPPLIERS) {
+    if (!(await prisma.supplier.findFirst({ where: { organizationId, name: s.name, deletedAt: null } }))) await prisma.supplier.create({ data: { organizationId, ...s } });
+  }
+  const suppliers = new Map((await prisma.supplier.findMany({ where: { organizationId, deletedAt: null } })).map((s) => [s.name, s.id] as [string, string]));
+
+  for (const [sku, name, category, unit, minStock, maxStock, cost] of DEMO_ITEMS) {
+    if (!(await prisma.inventoryItem.findFirst({ where: { organizationId, sku, deletedAt: null } }))) {
+      await prisma.inventoryItem.create({ data: { organizationId, sku, name, category, unit, minStock, maxStock, unitCostMinor: cost * 100 } });
+    }
+  }
+  type SeedItem = { id: string; minStock: number; maxStock: number; unitCostMinor: number };
+  const itemRows: Array<SeedItem & { sku: string }> = await prisma.inventoryItem.findMany({ where: { organizationId, deletedAt: null } });
+  const items = new Map<string, SeedItem>(itemRows.map((i) => [i.sku, i] as [string, SeedItem]));
+
+  // Opening stock per property: a mix of healthy, low and out.
+  let p = 0;
+  for (const [, propertyId] of propertyIds) {
+    p++;
+    if ((await prisma.stockMovement.count({ where: { propertyId } })) > 0) continue;
+    let i = 0;
+    for (const item of items.values()) {
+      i++;
+      const pattern = (i + p) % 5; // 0 = out, 1 = low, others healthy
+      const qty = pattern === 0 ? 0 : pattern === 1 ? Math.max(Math.floor(item.minStock / 2), 1) : Math.floor((item.minStock + (item.maxStock || item.minStock * 2)) / 2);
+      if (qty > 0) await prisma.stockMovement.create({ data: { organizationId, propertyId, itemId: item.id, type: 'OPENING', quantity: qty, note: 'Opening count', createdById: ownerId } });
+    }
+  }
+
+  const manila = propertyIds.get('manila-grand');
+  if (!manila) return;
+  const today = todayIn('Asia/Manila');
+  const requester = staff.get('manager') ?? ownerId;
+
+  if ((await prisma.purchaseOrder.count({ where: { propertyId: manila } })) === 0) {
+    const order = async (code: string, supplier: string, status: 'REQUESTED' | 'APPROVED' | 'PARTIALLY_RECEIVED' | 'RECEIVED', lines: Array<[string, number, number, number]>, daysAgo: number) => {
+      const total = lines.reduce((sum, [, q, c]) => sum + q * c, 0);
+      const approved = status !== 'REQUESTED';
+      return prisma.purchaseOrder.create({
+        data: {
+          organizationId, propertyId: manila, code, supplierId: suppliers.get(supplier)!, status, currency: 'PHP', totalMinor: total, requestedById: requester,
+          requestedAt: new Date(`${addDays(today, -daysAgo)}T02:00:00.000Z`), approvedById: approved ? ownerId : null, decidedAt: approved ? new Date() : null,
+          lines: { create: lines.map(([sku, quantity, unitCostMinor, receivedQuantity]) => ({ organizationId, itemId: items.get(sku)!.id, quantity, unitCostMinor, receivedQuantity })) },
+        },
+        include: { lines: true },
+      });
+    };
+    const receive = async (po: { id: string; lines: Array<{ itemId: string; unitCostMinor: number; receivedQuantity: number }> }, code: string) => {
+      for (const l of po.lines) if (l.receivedQuantity > 0) await prisma.stockMovement.create({ data: { organizationId, propertyId: manila, itemId: l.itemId, type: 'PURCHASE_RECEIPT', quantity: l.receivedQuantity, unitCostMinor: l.unitCostMinor, purchaseOrderId: po.id, note: `Received on ${code}`, createdById: ownerId } });
+    };
+
+    await order('PO-DEMO01', 'Metro Linen Supply', 'REQUESTED', [['TWL-BATH', 60, 18000, 0], ['SHT-QN', 40, 35000, 0]], 1);
+    const po2 = await order('PO-DEMO02', 'FreshMart Foods', 'PARTIALLY_RECEIVED', [['FD-RICE', 100, 5500, 60]], 3);
+    await receive(po2, 'PO-DEMO02');
+    const po3 = await order('PO-DEMO03', 'FreshMart Foods', 'RECEIVED', [['FD-CHKN', 40, 19000, 40]], 20);
+    await receive(po3, 'PO-DEMO03');
+    await prisma.supplierInvoice.create({ data: { organizationId, propertyId: manila, purchaseOrderId: po3.id, supplierId: suppliers.get('FreshMart Foods')!, number: 'FM-10231', amountMinor: 760000, receivedValueMinor: 760000, issuedOn: new Date(`${addDays(today, -18)}T00:00:00.000Z`), dueOn: new Date(`${addDays(today, -4)}T00:00:00.000Z`), createdById: ownerId } });
+    const po4 = await order('PO-DEMO04', 'CleanPro Trading', 'RECEIVED', [['BV-WATER', 200, 1400, 200]], 12);
+    await receive(po4, 'PO-DEMO04');
+    // The supplier charged MORE than what arrived: shows the invoice variance warning. This one has been paid.
+    const inv4 = await prisma.supplierInvoice.create({ data: { organizationId, propertyId: manila, purchaseOrderId: po4.id, supplierId: suppliers.get('CleanPro Trading')!, number: 'CP-5540', amountMinor: 294000, receivedValueMinor: 280000, issuedOn: new Date(`${addDays(today, -10)}T00:00:00.000Z`), dueOn: new Date(`${addDays(today, 5)}T00:00:00.000Z`), status: 'PAID', paidAt: new Date(), paidMethod: 'BANK_TRANSFER', paidReference: 'TRX-88213', createdById: ownerId } });
+    await prisma.expense.create({ data: { organizationId, propertyId: manila, category: 'INVENTORY', vendor: 'CleanPro Trading', supplierId: suppliers.get('CleanPro Trading')!, incurredOn: new Date(`${addDays(today, -2)}T00:00:00.000Z`), amountMinor: 294000, paymentMethod: 'BANK_TRANSFER', reference: 'TRX-88213', note: 'Supplier invoice CP-5540 (PO-DEMO04)', source: 'PURCHASING', supplierInvoiceId: inv4.id, createdById: ownerId } });
+  }
+
+  if ((await prisma.expense.count({ where: { propertyId: manila, source: 'MANUAL' } })) === 0) {
+    const manual: Array<['UTILITIES' | 'RENT' | 'INTERNET' | 'PAYROLL' | 'MARKETING' | 'TRANSPORTATION' | 'MAINTENANCE', string, number, 'CASH' | 'CARD' | 'BANK_TRANSFER', number]> = [
+      ['UTILITIES', 'Meralco', 18_450_000, 'BANK_TRANSFER', 25], ['UTILITIES', 'Manila Water', 3_120_000, 'BANK_TRANSFER', 24],
+      ['RENT', 'Lot lease', 25_000_000, 'BANK_TRANSFER', 28], ['INTERNET', 'PLDT Enterprise', 1_850_000, 'CARD', 20],
+      ['PAYROLL', 'Payroll (1st half)', 42_000_000, 'BANK_TRANSFER', 15], ['MARKETING', 'Social media ads', 1_200_000, 'CARD', 9],
+      ['TRANSPORTATION', 'Airport shuttle fuel', 350_000, 'CASH', 5], ['MAINTENANCE', 'Aircon servicing', 780_000, 'CASH', 3],
+    ];
+    for (const [category, vendor, amountMinor, paymentMethod, daysAgo] of manual) {
+      await prisma.expense.create({ data: { organizationId, propertyId: manila, category, vendor, incurredOn: new Date(`${addDays(today, -daysAgo)}T00:00:00.000Z`), amountMinor, paymentMethod, createdById: ownerId } });
+    }
+  }
+}
+
 async function seedPermissionsAndRoles() {
   for (const p of PERMISSIONS) {
     await prisma.permission.upsert({ where: { key: p.key }, update: p, create: p });
@@ -493,6 +594,7 @@ async function seedDemoOrganization() {
   const propertyIds = new Map<string, string>(propertyRows.map((p) => [p.slug, p.id] as [string, string]));
   const staff = await seedStaff(org.id, propertyIds, password);
   for (const [slug, propertyId] of propertyIds) await seedOperations(org.id, propertyId, slug, staff);
+  await seedBusiness(org.id, propertyIds, staff, owner.id);
 
   return { org, email };
 }

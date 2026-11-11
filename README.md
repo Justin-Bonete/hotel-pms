@@ -164,3 +164,25 @@ How it works:
 - **Staff:** you can only give a role you could exercise yourself, at a scope you cover. Managers cannot touch owners, nobody can change their own access, and the last owner can never be removed or disabled. Disabling signs the person out everywhere at once.
 - **Live updates:** Server-Sent Events over Redis. Events carry ids only and are sent after the database commit; screens refetch through the normal permission-checked API. If the stream drops, screens still refresh on timers.
 - **Extend stay:** an in-house guest's departure can be moved later if the room is free; the added nights and taxes are billed to the folio.
+
+## Inventory, purchasing and expenses (Phase 5a)
+
+```bash
+pnpm install
+pnpm build:packages
+pnpm db:migrate     # name it: phase5a_business
+pnpm db:rls         # RLS, the append-only stock ledger, and the money/stock constraints
+pnpm db:seed        # demo suppliers, 12 items with stock (some low/out), purchase orders in every state, expenses
+pnpm test && pnpm test:int
+```
+
+If `db:migrate` says "Drift detected", run `pnpm db:reset` (development database only).
+
+The rules the code enforces:
+- **Stock is a ledger.** Every change is a permanent movement the application can add but never edit or delete (enforced by database permissions). On-hand stock is the sum of a property's movements. Stock can never go below zero, and changes to the same stock take turns (advisory lock).
+- **Transfers** move stock between two properties atomically and need inventory access at both.
+- **Purchasing:** request -> approve -> receive -> invoice -> pay. You cannot approve your own request, unless nobody else could approve it there (a one-manager hotel; the audit log records it). Goods can never be received beyond what was ordered. A line total never changes after the request.
+- **Invoice matching:** an invoice is compared with the value of goods actually received; any difference is flagged on screen and in the audit log. It is never silently accepted.
+- **Paying a supplier invoice** marks it paid and records the expense in one step, exactly once.
+- **Expenses** are never deleted; a wrong entry is voided with a reason. Voided entries don't count in totals.
+- Receipt/photo attachments are "coming soon" (they need document storage).
