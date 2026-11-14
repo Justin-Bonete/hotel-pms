@@ -8,16 +8,16 @@ export declare const supplierSchema: z.ZodObject<{
     notes: z.ZodString;
 }, "strip", z.ZodTypeAny, {
     email: string;
-    name: string;
     phone: string;
     notes: string;
+    name: string;
     contactName: string;
     address: string;
 }, {
     email: string;
-    name: string;
     phone: string;
     notes: string;
+    name: string;
     contactName: string;
     address: string;
 }>;
@@ -30,16 +30,16 @@ export declare const updateSupplierSchema: z.ZodObject<{
     notes: z.ZodOptional<z.ZodString>;
 }, "strip", z.ZodTypeAny, {
     email?: string | undefined;
-    name?: string | undefined;
     phone?: string | undefined;
     notes?: string | undefined;
+    name?: string | undefined;
     contactName?: string | undefined;
     address?: string | undefined;
 }, {
     email?: string | undefined;
-    name?: string | undefined;
     phone?: string | undefined;
     notes?: string | undefined;
+    name?: string | undefined;
     contactName?: string | undefined;
     address?: string | undefined;
 }>;
@@ -316,10 +316,10 @@ export declare const payInvoiceSchema: z.ZodObject<{
     method: z.ZodEnum<["CASH", "CARD", "BANK_TRANSFER", "E_WALLET", "OTHER"]>;
     reference: z.ZodString;
 }, "strip", z.ZodTypeAny, {
-    method: "CASH" | "CARD" | "BANK_TRANSFER" | "E_WALLET" | "OTHER";
+    method: "OTHER" | "CASH" | "CARD" | "BANK_TRANSFER" | "E_WALLET";
     reference: string;
 }, {
-    method: "CASH" | "CARD" | "BANK_TRANSFER" | "E_WALLET" | "OTHER";
+    method: "OTHER" | "CASH" | "CARD" | "BANK_TRANSFER" | "E_WALLET";
     reference: string;
 }>;
 export declare const ordersQuerySchema: z.ZodObject<{
@@ -352,7 +352,7 @@ export declare const expenseSchema: z.ZodObject<{
     category: "OTHER" | "UTILITIES" | "PAYROLL" | "SUPPLIES" | "MAINTENANCE" | "MARKETING" | "RENT" | "INTERNET" | "TRANSPORTATION" | "INVENTORY";
     vendor: string;
     incurredOn: string;
-    paymentMethod: "CASH" | "CARD" | "BANK_TRANSFER" | "E_WALLET" | "OTHER";
+    paymentMethod: "OTHER" | "CASH" | "CARD" | "BANK_TRANSFER" | "E_WALLET";
     departmentId?: string | undefined;
 }, {
     amountMinor: number;
@@ -361,7 +361,7 @@ export declare const expenseSchema: z.ZodObject<{
     category: "OTHER" | "UTILITIES" | "PAYROLL" | "SUPPLIES" | "MAINTENANCE" | "MARKETING" | "RENT" | "INTERNET" | "TRANSPORTATION" | "INVENTORY";
     vendor: string;
     incurredOn: string;
-    paymentMethod: "CASH" | "CARD" | "BANK_TRANSFER" | "E_WALLET" | "OTHER";
+    paymentMethod: "OTHER" | "CASH" | "CARD" | "BANK_TRANSFER" | "E_WALLET";
     departmentId?: string | undefined;
 }>;
 export declare const voidExpenseSchema: z.ZodObject<{

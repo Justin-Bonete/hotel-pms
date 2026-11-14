@@ -29,16 +29,16 @@ export declare const posItemSchema: z.ZodObject<{
     inventoryItemId: z.ZodOptional<z.ZodString>;
     inventoryQuantity: z.ZodNumber;
 }, "strip", z.ZodTypeAny, {
-    taxable: boolean;
     name: string;
+    taxable: boolean;
     category: string;
     outletId: string;
     priceMinor: number;
     inventoryQuantity: number;
     inventoryItemId?: string | undefined;
 }, {
-    taxable: boolean;
     name: string;
+    taxable: boolean;
     category: string;
     outletId: string;
     priceMinor: number;
@@ -53,15 +53,15 @@ export declare const updatePosItemSchema: z.ZodObject<{
     inventoryItemId: z.ZodOptional<z.ZodNullable<z.ZodString>>;
     inventoryQuantity: z.ZodOptional<z.ZodNumber>;
 }, "strip", z.ZodTypeAny, {
-    taxable?: boolean | undefined;
     name?: string | undefined;
+    taxable?: boolean | undefined;
     category?: string | undefined;
     priceMinor?: number | undefined;
     inventoryItemId?: string | null | undefined;
     inventoryQuantity?: number | undefined;
 }, {
-    taxable?: boolean | undefined;
     name?: string | undefined;
+    taxable?: boolean | undefined;
     category?: string | undefined;
     priceMinor?: number | undefined;
     inventoryItemId?: string | null | undefined;
@@ -85,10 +85,10 @@ export declare const createPosOrderSchema: z.ZodEffects<z.ZodObject<{
         method: z.ZodEnum<["CASH", "CARD", "BANK_TRANSFER", "E_WALLET", "OTHER"]>;
     }, "strip", z.ZodTypeAny, {
         type: "PAY_NOW";
-        method: "CASH" | "CARD" | "BANK_TRANSFER" | "E_WALLET" | "OTHER";
+        method: "OTHER" | "CASH" | "CARD" | "BANK_TRANSFER" | "E_WALLET";
     }, {
         type: "PAY_NOW";
-        method: "CASH" | "CARD" | "BANK_TRANSFER" | "E_WALLET" | "OTHER";
+        method: "OTHER" | "CASH" | "CARD" | "BANK_TRANSFER" | "E_WALLET";
     }>, z.ZodObject<{
         type: z.ZodLiteral<"ROOM_CHARGE">;
         reservationId: z.ZodString;
@@ -110,7 +110,7 @@ export declare const createPosOrderSchema: z.ZodEffects<z.ZodObject<{
     outletId: string;
     settlement: {
         type: "PAY_NOW";
-        method: "CASH" | "CARD" | "BANK_TRANSFER" | "E_WALLET" | "OTHER";
+        method: "OTHER" | "CASH" | "CARD" | "BANK_TRANSFER" | "E_WALLET";
     } | {
         type: "ROOM_CHARGE";
         reservationId: string;
@@ -125,7 +125,7 @@ export declare const createPosOrderSchema: z.ZodEffects<z.ZodObject<{
     outletId: string;
     settlement: {
         type: "PAY_NOW";
-        method: "CASH" | "CARD" | "BANK_TRANSFER" | "E_WALLET" | "OTHER";
+        method: "OTHER" | "CASH" | "CARD" | "BANK_TRANSFER" | "E_WALLET";
     } | {
         type: "ROOM_CHARGE";
         reservationId: string;
@@ -140,7 +140,7 @@ export declare const createPosOrderSchema: z.ZodEffects<z.ZodObject<{
     outletId: string;
     settlement: {
         type: "PAY_NOW";
-        method: "CASH" | "CARD" | "BANK_TRANSFER" | "E_WALLET" | "OTHER";
+        method: "OTHER" | "CASH" | "CARD" | "BANK_TRANSFER" | "E_WALLET";
     } | {
         type: "ROOM_CHARGE";
         reservationId: string;
@@ -155,7 +155,7 @@ export declare const createPosOrderSchema: z.ZodEffects<z.ZodObject<{
     outletId: string;
     settlement: {
         type: "PAY_NOW";
-        method: "CASH" | "CARD" | "BANK_TRANSFER" | "E_WALLET" | "OTHER";
+        method: "OTHER" | "CASH" | "CARD" | "BANK_TRANSFER" | "E_WALLET";
     } | {
         type: "ROOM_CHARGE";
         reservationId: string;

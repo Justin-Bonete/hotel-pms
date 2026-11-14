@@ -19,9 +19,9 @@ export declare const propertyFormSchema: z.ZodObject<{
 }, "strip", z.ZodTypeAny, {
     email: string;
     type: "HOTEL" | "RESORT" | "BOUTIQUE" | "INN" | "HOSTEL" | "SERVICED_APARTMENT" | "VACATION_RENTAL";
-    name: string;
     phone: string;
     country: string;
+    name: string;
     groupId: string;
     addressLine1: string;
     addressLine2: string;
@@ -35,9 +35,9 @@ export declare const propertyFormSchema: z.ZodObject<{
 }, {
     email: string;
     type: "HOTEL" | "RESORT" | "BOUTIQUE" | "INN" | "HOSTEL" | "SERVICED_APARTMENT" | "VACATION_RENTAL";
-    name: string;
     phone: string;
     country: string;
+    name: string;
     groupId: string;
     addressLine1: string;
     addressLine2: string;
@@ -52,9 +52,9 @@ export declare const propertyFormSchema: z.ZodObject<{
 export declare const createPropertySchema: z.ZodObject<{
     email: z.ZodOptional<z.ZodUnion<[z.ZodLiteral<"">, z.ZodString]>>;
     type: z.ZodEnum<["HOTEL", "RESORT", "BOUTIQUE", "INN", "HOSTEL", "SERVICED_APARTMENT", "VACATION_RENTAL"]>;
-    name: z.ZodString;
     phone: z.ZodOptional<z.ZodString>;
     country: z.ZodOptional<z.ZodString>;
+    name: z.ZodString;
     groupId: z.ZodOptional<z.ZodUnion<[z.ZodLiteral<"">, z.ZodString]>>;
     addressLine1: z.ZodOptional<z.ZodString>;
     addressLine2: z.ZodOptional<z.ZodString>;
@@ -117,9 +117,9 @@ export declare const updatePropertySchema: z.ZodObject<{
 }, "strip", z.ZodTypeAny, {
     email?: string | undefined;
     type?: "HOTEL" | "RESORT" | "BOUTIQUE" | "INN" | "HOSTEL" | "SERVICED_APARTMENT" | "VACATION_RENTAL" | undefined;
-    name?: string | undefined;
     phone?: string | undefined;
     country?: string | undefined;
+    name?: string | undefined;
     groupId?: string | undefined;
     addressLine1?: string | undefined;
     addressLine2?: string | undefined;
@@ -133,9 +133,9 @@ export declare const updatePropertySchema: z.ZodObject<{
 }, {
     email?: string | undefined;
     type?: "HOTEL" | "RESORT" | "BOUTIQUE" | "INN" | "HOSTEL" | "SERVICED_APARTMENT" | "VACATION_RENTAL" | undefined;
-    name?: string | undefined;
     phone?: string | undefined;
     country?: string | undefined;
+    name?: string | undefined;
     groupId?: string | undefined;
     addressLine1?: string | undefined;
     addressLine2?: string | undefined;

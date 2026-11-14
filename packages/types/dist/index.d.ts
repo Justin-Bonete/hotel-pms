@@ -73,6 +73,7 @@ export * from './operations';
 export * from './business';
 export * from './dashboard';
 export * from './pos';
+export * from './analytics';
 export interface AccessSummary {
     roles: Array<{
         key: string;

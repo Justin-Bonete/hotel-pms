@@ -1,16 +1,17 @@
 'use client';
 
-import type { DashboardToday } from '@pms/types';
+import { presetRange, type DashboardToday } from '@pms/types';
 import { useQuery } from '@tanstack/react-query';
 import { useState } from 'react';
 import Link from 'next/link';
 import { Alert, Badge, Button, Card, EmptyState, Spinner } from '@/components/ui/ui';
+import { useAccess } from '@/features/access/access-context';
+import { delta, money, pct } from '@/features/analytics/format';
+import { localToday, useAnalytics } from '@/features/analytics/queries';
 import { useAuth } from '@/features/auth/auth-context';
 import { ALL_PROPERTIES, useProperties } from '@/features/properties/property-context';
 import { api } from '@/lib/api';
-
-// Revenue, ADR and RevPAR need carefully defined date-range calculations (and POS revenue); they arrive with analytics.
-const ANALYTICS_KPIS = ['Revenue', 'ADR', 'RevPAR'];
+import { cn } from '@/lib/utils';
 
 export default function DashboardPage() {
   const { user } = useAuth();
@@ -23,6 +24,16 @@ export default function DashboardPage() {
     refetchInterval: 60_000,
   });
   const t = today.data?.totals;
+
+  // Performance: the last 30 days, compared with the 30 days before. Only for people allowed to see analytics.
+  const { can } = useAccess();
+  const propertyId = selectedId && selectedId !== ALL_PROPERTIES ? selectedId : null;
+  const canAnalytics = propertyId ? can('analytics.read', propertyId) : can('analytics.read');
+  const range = presetRange('last30', localToday());
+  const perf = useAnalytics(propertyId, range.from, range.to, canAnalytics && !isLoading && properties.length > 0);
+  const pc = perf.data?.current ?? null;
+  const pp = perf.data?.previous ?? null;
+  const cur = perf.data?.currency ?? null;
 
   return (
     <div className="mx-auto max-w-6xl space-y-8">
@@ -102,20 +113,33 @@ export default function DashboardPage() {
         )}
       </section>
 
-      <section aria-labelledby="kpis">
-        <h2 id="kpis" className="mb-3 text-sm font-semibold uppercase tracking-wide text-slate-500">Performance</h2>
-        <div className="grid grid-cols-2 gap-4 md:grid-cols-3">
-          {ANALYTICS_KPIS.map((label) => (
-            <Card key={label} className="bg-slate-50/60">
-              <p className="text-sm text-slate-500">{label}</p>
-              <p className="mt-2 text-2xl font-semibold text-slate-300">—</p>
-              <div className="mt-2"><Badge tone="info">Coming soon · Analytics</Badge></div>
-            </Card>
-          ))}
-        </div>
-        <p className="mt-3 text-xs text-slate-500">Revenue, ADR and RevPAR need date ranges, comparisons and every revenue source (rooms and POS), so they arrive with the analytics phase. Nothing on this page is sample data.</p>
-      </section>
+      {canAnalytics && (
+        <section aria-labelledby="kpis">
+          <div className="mb-3 flex items-center justify-between">
+            <h2 id="kpis" className="text-sm font-semibold uppercase tracking-wide text-slate-500">Performance · last 30 days</h2>
+            <Link href="/analytics" className="text-sm font-medium text-indigo-600 hover:text-indigo-500">Open analytics →</Link>
+          </div>
+          {perf.error && <Alert tone="error" action={<Button variant="secondary" onClick={() => perf.refetch()}>Retry</Button>}>We could not load performance. {perf.error.message}</Alert>}
+          {perf.data?.mixedCurrencies && <Alert tone="warning">These properties use different currencies, so totals are not shown here. Open analytics for each property.</Alert>}
+          <div className="grid grid-cols-2 gap-4 md:grid-cols-4">
+            <PerfCard label="Revenue" loading={perf.isLoading} value={pc ? money(pc.totalRevenueMinor, cur) : undefined} d={pc && pp ? delta(pc.totalRevenueMinor, pp.totalRevenueMinor) : undefined} />
+            <PerfCard label="Occupancy" loading={perf.isLoading} value={pc ? pct(pc.occupancyPct) : undefined} d={pc && pp ? delta(pc.occupancyPct, pp.occupancyPct) : undefined} />
+            <PerfCard label="ADR" loading={perf.isLoading} value={pc ? money(pc.adrMinor, cur) : undefined} d={pc && pp ? delta(pc.adrMinor, pp.adrMinor) : undefined} />
+            <PerfCard label="RevPAR" loading={perf.isLoading} value={pc ? money(pc.revparMinor, cur) : undefined} d={pc && pp ? delta(pc.revparMinor, pp.revparMinor) : undefined} />
+          </div>
+        </section>
+      )}
     </div>
+  );
+}
+
+function PerfCard({ label, value, d, loading }: { label: string; value: string | undefined; d: { text: string; tone: 'good' | 'bad' | 'flat' | 'none' } | undefined; loading: boolean }) {
+  return (
+    <Card>
+      <p className="text-sm text-slate-500">{label}</p>
+      <p className="mt-2 text-2xl font-semibold tabular-nums text-slate-900">{loading || value === undefined ? <span className="text-slate-300">…</span> : value}</p>
+      {d && <p className={cn('mt-1 text-xs', d.tone === 'good' && 'text-emerald-700', d.tone === 'bad' && 'text-red-700', (d.tone === 'flat' || d.tone === 'none') && 'text-slate-500')}>{d.text}</p>}
+    </Card>
   );
 }
 

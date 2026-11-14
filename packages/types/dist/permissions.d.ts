@@ -245,6 +245,11 @@ export declare const PERMISSION_CATALOG: readonly [{
     readonly level: "PROPERTY";
     readonly description: "Manage outlets and menu items";
 }, {
+    readonly key: "analytics.read";
+    readonly module: "analytics";
+    readonly level: "PROPERTY";
+    readonly description: "View analytics and reports";
+}, {
     readonly key: "staff.read";
     readonly module: "staff";
     readonly level: "PROPERTY";

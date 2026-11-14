@@ -32,12 +32,12 @@ export declare const adjustmentSchema: z.ZodObject<{
     reason: z.ZodString;
 }, "strip", z.ZodTypeAny, {
     description: string;
-    amountMinor: number;
     reason: string;
+    amountMinor: number;
 }, {
     description: string;
-    amountMinor: number;
     reason: string;
+    amountMinor: number;
 }>;
 export declare const paymentSchema: z.ZodObject<{
     amountMinor: z.ZodNumber;
@@ -46,12 +46,12 @@ export declare const paymentSchema: z.ZodObject<{
     note: z.ZodString;
 }, "strip", z.ZodTypeAny, {
     amountMinor: number;
-    method: "CASH" | "CARD" | "BANK_TRANSFER" | "E_WALLET" | "OTHER";
+    method: "OTHER" | "CASH" | "CARD" | "BANK_TRANSFER" | "E_WALLET";
     reference: string;
     note: string;
 }, {
     amountMinor: number;
-    method: "CASH" | "CARD" | "BANK_TRANSFER" | "E_WALLET" | "OTHER";
+    method: "OTHER" | "CASH" | "CARD" | "BANK_TRANSFER" | "E_WALLET";
     reference: string;
     note: string;
 }>;
@@ -66,11 +66,11 @@ export declare const refundSchema: z.ZodObject<{
     amountMinor: z.ZodNumber;
     reason: z.ZodString;
 }, "strip", z.ZodTypeAny, {
-    amountMinor: number;
     reason: string;
+    amountMinor: number;
 }, {
-    amountMinor: number;
     reason: string;
+    amountMinor: number;
 }>;
 export declare const taxSchema: z.ZodObject<{
     name: z.ZodString;

@@ -6,14 +6,14 @@ export declare const roomTypeSchema: z.ZodObject<{
     bedConfiguration: z.ZodString;
     amenities: z.ZodArray<z.ZodString, "many">;
 }, "strip", z.ZodTypeAny, {
-    description: string;
     name: string;
+    description: string;
     maxOccupancy: number;
     bedConfiguration: string;
     amenities: string[];
 }, {
-    description: string;
     name: string;
+    description: string;
     maxOccupancy: number;
     bedConfiguration: string;
     amenities: string[];
@@ -25,14 +25,14 @@ export declare const updateRoomTypeSchema: z.ZodObject<{
     bedConfiguration: z.ZodOptional<z.ZodString>;
     amenities: z.ZodOptional<z.ZodArray<z.ZodString, "many">>;
 }, "strip", z.ZodTypeAny, {
-    description?: string | undefined;
     name?: string | undefined;
+    description?: string | undefined;
     maxOccupancy?: number | undefined;
     bedConfiguration?: string | undefined;
     amenities?: string[] | undefined;
 }, {
-    description?: string | undefined;
     name?: string | undefined;
+    description?: string | undefined;
     maxOccupancy?: number | undefined;
     bedConfiguration?: string | undefined;
     amenities?: string[] | undefined;

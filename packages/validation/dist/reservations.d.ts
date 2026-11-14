@@ -18,8 +18,8 @@ export declare const ratePlanSchema: z.ZodObject<{
         weekendRateMinor: number | null;
     }>, "many">;
 }, "strip", z.ZodTypeAny, {
-    description: string;
     name: string;
+    description: string;
     isDefault: boolean;
     rates: {
         roomTypeId: string;
@@ -27,8 +27,8 @@ export declare const ratePlanSchema: z.ZodObject<{
         weekendRateMinor: number | null;
     }[];
 }, {
-    description: string;
     name: string;
+    description: string;
     isDefault: boolean;
     rates: {
         roomTypeId: string;
@@ -86,7 +86,7 @@ export declare const createReservationSchema: z.ZodEffects<z.ZodEffects<z.ZodObj
     departureDate: string;
     adults: number;
     children: number;
-    source: "OTHER" | "WALK_IN" | "PHONE" | "WEBSITE" | "OTA" | "GROUP" | "CORPORATE" | "TRAVEL_AGENT";
+    source: "WALK_IN" | "PHONE" | "WEBSITE" | "OTA" | "GROUP" | "CORPORATE" | "TRAVEL_AGENT" | "OTHER";
     specialRequests: string;
     ratePlanId?: string | undefined;
     guestId?: string | undefined;
@@ -108,7 +108,7 @@ export declare const createReservationSchema: z.ZodEffects<z.ZodEffects<z.ZodObj
     departureDate: string;
     adults: number;
     children: number;
-    source: "OTHER" | "WALK_IN" | "PHONE" | "WEBSITE" | "OTA" | "GROUP" | "CORPORATE" | "TRAVEL_AGENT";
+    source: "WALK_IN" | "PHONE" | "WEBSITE" | "OTA" | "GROUP" | "CORPORATE" | "TRAVEL_AGENT" | "OTHER";
     specialRequests: string;
     ratePlanId?: string | undefined;
     guestId?: string | undefined;
@@ -130,7 +130,7 @@ export declare const createReservationSchema: z.ZodEffects<z.ZodEffects<z.ZodObj
     departureDate: string;
     adults: number;
     children: number;
-    source: "OTHER" | "WALK_IN" | "PHONE" | "WEBSITE" | "OTA" | "GROUP" | "CORPORATE" | "TRAVEL_AGENT";
+    source: "WALK_IN" | "PHONE" | "WEBSITE" | "OTA" | "GROUP" | "CORPORATE" | "TRAVEL_AGENT" | "OTHER";
     specialRequests: string;
     ratePlanId?: string | undefined;
     guestId?: string | undefined;
@@ -152,7 +152,7 @@ export declare const createReservationSchema: z.ZodEffects<z.ZodEffects<z.ZodObj
     departureDate: string;
     adults: number;
     children: number;
-    source: "OTHER" | "WALK_IN" | "PHONE" | "WEBSITE" | "OTA" | "GROUP" | "CORPORATE" | "TRAVEL_AGENT";
+    source: "WALK_IN" | "PHONE" | "WEBSITE" | "OTA" | "GROUP" | "CORPORATE" | "TRAVEL_AGENT" | "OTHER";
     specialRequests: string;
     ratePlanId?: string | undefined;
     guestId?: string | undefined;
@@ -174,7 +174,7 @@ export declare const createReservationSchema: z.ZodEffects<z.ZodEffects<z.ZodObj
     departureDate: string;
     adults: number;
     children: number;
-    source: "OTHER" | "WALK_IN" | "PHONE" | "WEBSITE" | "OTA" | "GROUP" | "CORPORATE" | "TRAVEL_AGENT";
+    source: "WALK_IN" | "PHONE" | "WEBSITE" | "OTA" | "GROUP" | "CORPORATE" | "TRAVEL_AGENT" | "OTHER";
     specialRequests: string;
     ratePlanId?: string | undefined;
     guestId?: string | undefined;
@@ -196,7 +196,7 @@ export declare const createReservationSchema: z.ZodEffects<z.ZodEffects<z.ZodObj
     departureDate: string;
     adults: number;
     children: number;
-    source: "OTHER" | "WALK_IN" | "PHONE" | "WEBSITE" | "OTA" | "GROUP" | "CORPORATE" | "TRAVEL_AGENT";
+    source: "WALK_IN" | "PHONE" | "WEBSITE" | "OTA" | "GROUP" | "CORPORATE" | "TRAVEL_AGENT" | "OTHER";
     specialRequests: string;
     ratePlanId?: string | undefined;
     guestId?: string | undefined;

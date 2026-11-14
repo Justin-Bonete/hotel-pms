@@ -9,16 +9,16 @@ export declare const registerSchema: z.ZodObject<{
     email: z.ZodString;
     password: z.ZodString;
 }, "strip", z.ZodTypeAny, {
-    organizationName: string;
     firstName: string;
     lastName: string;
     email: string;
+    organizationName: string;
     password: string;
 }, {
-    organizationName: string;
     firstName: string;
     lastName: string;
     email: string;
+    organizationName: string;
     password: string;
 }>;
 export declare const loginSchema: z.ZodObject<{

@@ -58,6 +58,7 @@ export const PERMISSION_CATALOG = [
   { key: 'pos.sell', module: 'pos', level: 'PROPERTY', description: 'Ring up sales and charge them to a guest room' },
   { key: 'pos.void', module: 'pos', level: 'PROPERTY', description: 'Void a POS sale' },
   { key: 'pos.manage', module: 'pos', level: 'PROPERTY', description: 'Manage outlets and menu items' },
+  { key: 'analytics.read', module: 'analytics', level: 'PROPERTY', description: 'View analytics and reports' },
   { key: 'staff.read', module: 'staff', level: 'PROPERTY', description: 'View staff accounts' },
   { key: 'staff.manage', module: 'staff', level: 'PROPERTY', description: 'Create, edit, disable staff accounts' },
   { key: 'role.read', module: 'rbac', level: 'ORGANIZATION', description: 'View roles and permissions' },
@@ -114,7 +115,7 @@ const OPS_ADMIN: readonly PermissionKey[] = [
 ];
 const BUSINESS_ADMIN: readonly PermissionKey[] = [
   'inventory.read', 'inventory.manage', 'purchasing.read', 'purchasing.manage', 'purchasing.request', 'purchasing.approve',
-  'purchasing.receive', 'purchasing.pay', 'expense.read', 'expense.manage',
+  'purchasing.receive', 'purchasing.pay', 'expense.read', 'expense.manage', 'analytics.read',
 ];
 const POS_ADMIN: readonly PermissionKey[] = ['pos.read', 'pos.sell', 'pos.void', 'pos.manage'];
 const BILLING_ADMIN: readonly PermissionKey[] = [
@@ -152,6 +153,6 @@ export const SYSTEM_ROLE_TEMPLATES: readonly SystemRoleTemplate[] = [
   operational('HOUSEKEEPER', 'Housekeeper', [...ROOM_OPERATIONS, 'housekeeping.read', 'housekeeping.work', 'maintenance.report']),
   operational('MAINTENANCE', 'Maintenance', [...ROOM_OPERATIONS, 'maintenance.read', 'maintenance.report', 'maintenance.work']),
   operational('CASHIER', 'Cashier', ['property.read', 'reservation.read', 'folio.read', 'payment.take', 'pos.read', 'pos.sell']),
-  operational('ACCOUNTANT', 'Accountant', ['property.read', 'reservation.read', 'guest.read', 'rate.read', 'folio.read', 'inventory.read', 'purchasing.read', 'purchasing.pay', 'expense.read', 'expense.manage', 'pos.read']),
+  operational('ACCOUNTANT', 'Accountant', ['property.read', 'reservation.read', 'guest.read', 'rate.read', 'folio.read', 'inventory.read', 'purchasing.read', 'purchasing.pay', 'expense.read', 'expense.manage', 'pos.read', 'analytics.read']),
   operational('INVENTORY_MANAGER', 'Inventory Manager', ['property.read', 'inventory.read', 'inventory.manage', 'purchasing.read', 'purchasing.manage', 'purchasing.request', 'purchasing.receive']),
 ];

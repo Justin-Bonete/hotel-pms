@@ -211,3 +211,16 @@ The rules the code enforces:
 - **Pressing twice or retrying** never creates a second sale (request key).
 - **Daily report** uses the property's own day (its time zone, including daylight saving), counts voided sales separately and never inside sales.
 - **Dashboard:** Arrivals, Departures, In house, Occupancy and Dirty rooms are live. Occupancy = guests in house ÷ rooms that can be sold. Revenue, ADR and RevPAR come with analytics (they need date ranges and every revenue source).
+
+## Analytics and reports (Phase 6)
+
+No database change: run `pnpm install`, `pnpm build:packages`, `pnpm test`. Open **Analytics** and **Reports** in the sidebar (the dashboard's Performance cards use the same numbers). See `docs/ROADMAP.md` for the full checklist of what is built and what is still to do.
+
+How each number is defined (all money is whole centavos, worked out per property in its own time zone):
+- **Room revenue:** the nightly rates of each stay, before tax. A night counts as *sold* when the guest is checked in or out, or when it is a confirmed night from today onward ("on the books"). A confirmed booking whose past night never became a check-in is not counted. Cancelled, no-show, inquiry and pending stays never count.
+- **Occupancy** = sold room nights ÷ available room nights. **ADR** = room revenue ÷ sold nights. **RevPAR** = room revenue ÷ available nights (= ADR × occupancy).
+- **Total revenue** = room revenue + front-desk extras + POS sales (before tax). POS charges to a room are counted once, under POS. Voided sales and reversed charges are excluded.
+- **Several properties** are added up and the ratios worked out again from the totals (never an average of percentages). If the properties use different currencies, no combined money is shown.
+- **Comparison** is against the previous period of the same length. When there is nothing to compare with, it says so instead of showing an infinite or false 0% change.
+- **CSV exports** neutralise spreadsheet formulas in text cells and write money as plain numbers.
+- If a report ever reaches its safety row limit, the screen says the figures may be incomplete.

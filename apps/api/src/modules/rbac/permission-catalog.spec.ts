@@ -153,6 +153,12 @@ describe('system roles', () => {
     expect(role('ACCOUNTANT').permissions.filter((p) => p.startsWith('pos.'))).toEqual(['pos.read']);
   });
 
+  it('only managers and the accountant can see analytics; operational staff cannot', () => {
+    for (const r of SYSTEM_ROLE_TEMPLATES) {
+      expect(r.permissions.includes('analytics.read'), r.key).toBe(['OWNER', 'SUPER_ADMIN', 'GENERAL_MANAGER', 'PROPERTY_MANAGER', 'ACCOUNTANT'].includes(r.key));
+    }
+  });
+
   it('only managers can approve purchases; nobody in an operational role can', () => {
     for (const r of SYSTEM_ROLE_TEMPLATES) {
       expect(r.permissions.includes('purchasing.approve'), r.key).toBe(['OWNER', 'SUPER_ADMIN', 'GENERAL_MANAGER', 'PROPERTY_MANAGER'].includes(r.key));
