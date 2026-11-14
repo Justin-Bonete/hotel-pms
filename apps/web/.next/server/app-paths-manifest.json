@@ -1,0 +1,10 @@
+{
+  "/(dashboard)/dashboard/page": "app/(dashboard)/dashboard/page.js",
+  "/(dashboard)/settings/page": "app/(dashboard)/settings/page.js",
+  "/(dashboard)/expenses/page": "app/(dashboard)/expenses/page.js",
+  "/(dashboard)/[module]/page": "app/(dashboard)/[module]/page.js",
+  "/(dashboard)/properties/page": "app/(dashboard)/properties/page.js",
+  "/(dashboard)/purchasing/page": "app/(dashboard)/purchasing/page.js",
+  "/(dashboard)/rooms/page": "app/(dashboard)/rooms/page.js",
+  "/(dashboard)/inventory/page": "app/(dashboard)/inventory/page.js"
+}

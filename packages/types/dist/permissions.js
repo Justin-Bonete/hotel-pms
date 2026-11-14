@@ -1,0 +1,128 @@
+"use strict";
+Object.defineProperty(exports, "__esModule", { value: true });
+exports.SYSTEM_ROLE_TEMPLATES = exports.OPERATIONAL_ROLE_KEYS = exports.ALL_PERMISSION_KEYS = exports.PERMISSION_LEVEL = exports.PERMISSION_CATALOG = void 0;
+exports.PERMISSION_CATALOG = [
+    { key: 'organization.read', module: 'organization', level: 'ORGANIZATION', description: 'View organization profile' },
+    { key: 'organization.update', module: 'organization', level: 'ORGANIZATION', description: 'Edit organization profile' },
+    { key: 'property_group.read', module: 'property', level: 'ORGANIZATION', description: 'View property groups' },
+    { key: 'property_group.manage', module: 'property', level: 'ORGANIZATION', description: 'Create, edit, delete property groups' },
+    { key: 'property.read', module: 'property', level: 'PROPERTY', description: 'View properties' },
+    { key: 'property.create', module: 'property', level: 'ORGANIZATION', description: 'Create properties' },
+    { key: 'property.update', module: 'property', level: 'PROPERTY', description: 'Edit properties' },
+    { key: 'property.delete', module: 'property', level: 'ORGANIZATION', description: 'Archive properties' },
+    { key: 'room.read', module: 'room', level: 'PROPERTY', description: 'View rooms and room types' },
+    { key: 'room.manage', module: 'room', level: 'PROPERTY', description: 'Create, edit, archive rooms; set out-of-order' },
+    { key: 'room.update_status', module: 'room', level: 'PROPERTY', description: 'Change room status (cleaning flow)' },
+    { key: 'room_type.manage', module: 'room', level: 'PROPERTY', description: 'Create and edit room types' },
+    { key: 'guest.read', module: 'guest', level: 'PROPERTY', description: 'View guest profiles' },
+    { key: 'guest.manage', module: 'guest', level: 'PROPERTY', description: 'Create and edit guest profiles' },
+    { key: 'reservation.read', module: 'reservation', level: 'PROPERTY', description: 'View reservations and the calendar' },
+    { key: 'reservation.manage', module: 'reservation', level: 'PROPERTY', description: 'Create, edit, confirm, cancel reservations; assign rooms' },
+    { key: 'reservation.check_in', module: 'reservation', level: 'PROPERTY', description: 'Check guests in and out' },
+    { key: 'rate.read', module: 'rate', level: 'PROPERTY', description: 'View rate plans' },
+    { key: 'rate.manage', module: 'rate', level: 'PROPERTY', description: 'Create and edit rate plans' },
+    { key: 'folio.read', module: 'billing', level: 'PROPERTY', description: 'View guest folios, charges and payments' },
+    { key: 'folio.charge', module: 'billing', level: 'PROPERTY', description: 'Post extra charges to an in-house guest folio' },
+    { key: 'folio.adjust', module: 'billing', level: 'PROPERTY', description: 'Post discounts and adjustments; void charges' },
+    { key: 'folio.override_checkout', module: 'billing', level: 'PROPERTY', description: 'Check a guest out with a balance due or credit' },
+    { key: 'payment.take', module: 'billing', level: 'PROPERTY', description: 'Record payments and deposits' },
+    { key: 'payment.refund', module: 'billing', level: 'PROPERTY', description: 'Refund payments' },
+    { key: 'tax.manage', module: 'billing', level: 'PROPERTY', description: 'Configure property taxes and service charges' },
+    { key: 'housekeeping.read', module: 'housekeeping', level: 'PROPERTY', description: 'View housekeeping tasks' },
+    { key: 'housekeeping.work', module: 'housekeeping', level: 'PROPERTY', description: 'Receive and complete assigned cleaning tasks' },
+    { key: 'housekeeping.manage', module: 'housekeeping', level: 'PROPERTY', description: 'Create, assign and inspect housekeeping tasks' },
+    { key: 'maintenance.read', module: 'maintenance', level: 'PROPERTY', description: 'View maintenance tickets' },
+    { key: 'maintenance.report', module: 'maintenance', level: 'PROPERTY', description: 'Report maintenance problems' },
+    { key: 'maintenance.work', module: 'maintenance', level: 'PROPERTY', description: 'Work assigned maintenance tickets' },
+    { key: 'maintenance.manage', module: 'maintenance', level: 'PROPERTY', description: 'Assign, close and reopen maintenance tickets' },
+    { key: 'inventory.read', module: 'inventory', level: 'PROPERTY', description: 'View stock levels and movements' },
+    { key: 'inventory.manage', module: 'inventory', level: 'PROPERTY', description: 'Manage items; record usage, wastage, adjustments; transfer stock' },
+    { key: 'purchasing.read', module: 'purchasing', level: 'PROPERTY', description: 'View suppliers, purchase orders and supplier invoices' },
+    { key: 'purchasing.manage', module: 'purchasing', level: 'PROPERTY', description: 'Manage suppliers' },
+    { key: 'purchasing.request', module: 'purchasing', level: 'PROPERTY', description: 'Request purchases' },
+    { key: 'purchasing.approve', module: 'purchasing', level: 'PROPERTY', description: 'Approve, reject or cancel purchase requests' },
+    { key: 'purchasing.receive', module: 'purchasing', level: 'PROPERTY', description: 'Receive delivered goods into stock' },
+    { key: 'purchasing.pay', module: 'purchasing', level: 'PROPERTY', description: 'Record supplier invoices and pay them' },
+    { key: 'expense.read', module: 'expense', level: 'PROPERTY', description: 'View expenses' },
+    { key: 'expense.manage', module: 'expense', level: 'PROPERTY', description: 'Record and void expenses' },
+    { key: 'pos.read', module: 'pos', level: 'PROPERTY', description: 'View POS menus, orders and sales summaries' },
+    { key: 'pos.sell', module: 'pos', level: 'PROPERTY', description: 'Ring up sales and charge them to a guest room' },
+    { key: 'pos.void', module: 'pos', level: 'PROPERTY', description: 'Void a POS sale' },
+    { key: 'pos.manage', module: 'pos', level: 'PROPERTY', description: 'Manage outlets and menu items' },
+    { key: 'staff.read', module: 'staff', level: 'PROPERTY', description: 'View staff accounts' },
+    { key: 'staff.manage', module: 'staff', level: 'PROPERTY', description: 'Create, edit, disable staff accounts' },
+    { key: 'role.read', module: 'rbac', level: 'ORGANIZATION', description: 'View roles and permissions' },
+    { key: 'role.manage', module: 'rbac', level: 'ORGANIZATION', description: 'Create and edit custom roles' },
+    { key: 'role.assign', module: 'rbac', level: 'PROPERTY', description: 'Assign roles to staff (within own scope)' },
+    { key: 'audit.read', module: 'audit', level: 'PROPERTY', description: 'View audit logs' },
+];
+exports.PERMISSION_LEVEL = Object.fromEntries(exports.PERMISSION_CATALOG.map((p) => [p.key, p.level]));
+exports.ALL_PERMISSION_KEYS = exports.PERMISSION_CATALOG.map((p) => p.key);
+/** Roles whose members work a desk or a task, never administer the company. */
+exports.OPERATIONAL_ROLE_KEYS = [
+    'FRONT_DESK',
+    'RECEPTIONIST',
+    'HOUSEKEEPING_SUPERVISOR',
+    'HOUSEKEEPER',
+    'MAINTENANCE',
+    'CASHIER',
+    'ACCOUNTANT',
+    'INVENTORY_MANAGER',
+];
+const operational = (key, name, permissions = ['property.read']) => ({
+    key,
+    name,
+    description: `${name} (more permissions arrive with their modules)`,
+    permissions,
+});
+const ROOM_OPERATIONS = ['property.read', 'room.read', 'room.update_status'];
+const ROOM_ADMIN = ['room.read', 'room.manage', 'room.update_status', 'room_type.manage'];
+const RESERVATION_ADMIN = [
+    'guest.read', 'guest.manage', 'reservation.read', 'reservation.manage', 'reservation.check_in', 'rate.read', 'rate.manage',
+];
+const OPS_ADMIN = [
+    'housekeeping.read', 'housekeeping.work', 'housekeeping.manage', 'maintenance.read', 'maintenance.report', 'maintenance.work', 'maintenance.manage',
+];
+const BUSINESS_ADMIN = [
+    'inventory.read', 'inventory.manage', 'purchasing.read', 'purchasing.manage', 'purchasing.request', 'purchasing.approve',
+    'purchasing.receive', 'purchasing.pay', 'expense.read', 'expense.manage',
+];
+const POS_ADMIN = ['pos.read', 'pos.sell', 'pos.void', 'pos.manage'];
+const BILLING_ADMIN = [
+    'folio.read', 'folio.charge', 'folio.adjust', 'folio.override_checkout', 'payment.take', 'payment.refund', 'tax.manage',
+];
+const FRONT_DESK_PERMISSIONS = [
+    ...ROOM_OPERATIONS, 'guest.read', 'guest.manage', 'reservation.read', 'reservation.manage', 'reservation.check_in', 'rate.read',
+    'folio.read', 'folio.charge', 'payment.take',
+    'housekeeping.read', 'maintenance.read', 'maintenance.report',
+    'pos.read', 'pos.sell',
+];
+// Operational roles only receive real permissions in the phase that introduces their module.
+exports.SYSTEM_ROLE_TEMPLATES = [
+    { key: 'OWNER', name: 'Owner', description: 'Full access to the organization', permissions: exports.ALL_PERMISSION_KEYS },
+    { key: 'SUPER_ADMIN', name: 'Super Admin', description: 'Full administrative access', permissions: exports.ALL_PERMISSION_KEYS },
+    {
+        key: 'GENERAL_MANAGER',
+        name: 'General Manager',
+        description: 'Manages properties and staff',
+        permissions: [
+            'organization.read', 'property_group.read', 'property.read', 'property.update',
+            'staff.read', 'staff.manage', 'role.read', 'role.assign', 'audit.read', ...ROOM_ADMIN, ...RESERVATION_ADMIN, ...BILLING_ADMIN, ...OPS_ADMIN, ...BUSINESS_ADMIN, ...POS_ADMIN,
+        ],
+    },
+    {
+        key: 'PROPERTY_MANAGER',
+        name: 'Property Manager',
+        description: 'Manages assigned properties',
+        permissions: ['property.read', 'property.update', 'staff.read', 'role.read', ...ROOM_ADMIN, ...RESERVATION_ADMIN, ...BILLING_ADMIN, ...OPS_ADMIN, ...BUSINESS_ADMIN, ...POS_ADMIN],
+    },
+    operational('FRONT_DESK', 'Front Desk', FRONT_DESK_PERMISSIONS),
+    operational('RECEPTIONIST', 'Receptionist', FRONT_DESK_PERMISSIONS),
+    operational('HOUSEKEEPING_SUPERVISOR', 'Housekeeping Supervisor', [...ROOM_OPERATIONS, 'housekeeping.read', 'housekeeping.work', 'housekeeping.manage', 'maintenance.read', 'maintenance.report']),
+    operational('HOUSEKEEPER', 'Housekeeper', [...ROOM_OPERATIONS, 'housekeeping.read', 'housekeeping.work', 'maintenance.report']),
+    operational('MAINTENANCE', 'Maintenance', [...ROOM_OPERATIONS, 'maintenance.read', 'maintenance.report', 'maintenance.work']),
+    operational('CASHIER', 'Cashier', ['property.read', 'reservation.read', 'folio.read', 'payment.take', 'pos.read', 'pos.sell']),
+    operational('ACCOUNTANT', 'Accountant', ['property.read', 'reservation.read', 'guest.read', 'rate.read', 'folio.read', 'inventory.read', 'purchasing.read', 'purchasing.pay', 'expense.read', 'expense.manage', 'pos.read']),
+    operational('INVENTORY_MANAGER', 'Inventory Manager', ['property.read', 'inventory.read', 'inventory.manage', 'purchasing.read', 'purchasing.manage', 'purchasing.request', 'purchasing.receive']),
+];
+//# sourceMappingURL=permissions.js.map

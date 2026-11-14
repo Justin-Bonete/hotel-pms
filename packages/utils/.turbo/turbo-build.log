@@ -1,0 +1,4 @@
+
+> @pms/utils@0.0.0 build C:\dev\hotel-pms\packages\utils
+> tsc -p tsconfig.json
+

@@ -1,0 +1,18 @@
+import type { Prisma } from '@prisma/client';
+import type { Tx } from '../../database/prisma/prisma.service';
+export interface AuditEntry {
+    organizationId: string;
+    actorId?: string | null;
+    propertyId?: string;
+    /** e.g. "auth.login", "property.update" */
+    action: string;
+    entity: string;
+    entityId?: string;
+    /** Never include passwords, hashes, tokens or MFA secrets in before/after. */
+    before?: Prisma.InputJsonValue;
+    after?: Prisma.InputJsonValue;
+}
+/** Writes inside the caller's transaction, so an action and its audit record commit or roll back together. */
+export declare class AuditService {
+    record(tx: Tx, entry: AuditEntry): Promise<void>;
+}
