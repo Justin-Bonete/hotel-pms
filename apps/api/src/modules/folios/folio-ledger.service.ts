@@ -2,6 +2,7 @@ import { Injectable } from '@nestjs/common';
 import type { Prisma } from '@prisma/client';
 import { randomUUID } from 'node:crypto';
 import { addDays, calcTaxMinor, eachNight, formatRate, nightlyRatesFrom, parseDate, toDateString } from '@pms/types';
+import { conflict } from '../../common/http/errors';
 import type { Tx } from '../../database/prisma/prisma.service';
 
 export interface StayForBilling {
@@ -105,6 +106,61 @@ export class FolioLedger {
       }
     });
     return rows;
+  }
+
+  /**
+   * Posts one extra charge (and its taxes) to an OPEN folio, inside the caller's transaction. Used by the POS to bill a
+   * guest's room. Refuses if the bill is already closed. Returns the id of the charge line.
+   */
+  async postExtraCharge(
+    tx: Tx,
+    stay: Pick<StayForBilling, 'id' | 'organizationId' | 'propertyId' | 'currency'>,
+    input: { description: string; quantity: number; unitAmountMinor: number; taxable: boolean; source: string; actorId: string | null },
+  ): Promise<string> {
+    const folio = await this.ensureFolio(tx, stay);
+    if (folio.status !== 'OPEN') throw conflict('FOLIO_CLOSED', "This guest's bill is already closed, so nothing more can be charged to it.");
+    const amount = input.quantity * input.unitAmountMinor;
+    const id = randomUUID();
+    const rows: Prisma.FolioItemCreateManyInput[] = [
+      { id, organizationId: stay.organizationId, folioId: folio.id, type: 'EXTRA_CHARGE', description: input.description, quantity: input.quantity, unitAmountMinor: input.unitAmountMinor, amountMinor: amount, source: input.source, createdById: input.actorId },
+    ];
+    if (input.taxable) {
+      const taxes = await tx.tax.findMany({ where: { propertyId: stay.propertyId, isActive: true, deletedAt: null, appliesToExtras: true }, orderBy: { name: 'asc' } });
+      for (const tax of taxes) {
+        const taxAmount = calcTaxMinor(amount, tax.rateBps);
+        if (taxAmount > 0) rows.push({ id: randomUUID(), organizationId: stay.organizationId, folioId: folio.id, type: 'TAX', description: `${tax.name} (${formatRate(tax.rateBps)})`, quantity: 1, unitAmountMinor: taxAmount, amountMinor: taxAmount, parentItemId: id, taxId: tax.id, source: 'SYSTEM', createdById: input.actorId });
+      }
+    }
+    await tx.folioItem.createMany({ data: rows });
+    return id;
+  }
+
+  /** Reverses a charge and its tax lines by appending reversal lines (nothing is deleted). Already-reversed is a no-op. Needs an OPEN folio. */
+  async reverseItem(tx: Tx, itemId: string, reason: string, source: string, actorId: string | null): Promise<void> {
+    const item = await tx.folioItem.findFirst({ where: { id: itemId }, include: { folio: true, taxLines: true, reversedBy: { select: { id: true } } } });
+    if (!item) throw conflict('FOLIO_LINE_MISSING', 'The bill line for this sale could not be found.');
+    if (item.reversedBy) return;
+    if (item.folio.status !== 'OPEN') throw conflict('FOLIO_CLOSED', "This guest's bill is already closed, so the charge can't be reversed here. Ask a manager to adjust the closed bill.");
+
+    const reversalOfParent = randomUUID();
+    const rows: Prisma.FolioItemCreateManyInput[] = [item, ...item.taxLines].map((line) => ({
+      id: line.id === item.id ? reversalOfParent : randomUUID(),
+      organizationId: line.organizationId,
+      folioId: line.folioId,
+      type: 'REVERSAL' as const,
+      description: `VOID: ${line.description}`,
+      serviceDate: line.serviceDate,
+      quantity: 1,
+      unitAmountMinor: -line.amountMinor,
+      amountMinor: -line.amountMinor,
+      parentItemId: line.id === item.id ? null : reversalOfParent,
+      reversesItemId: line.id,
+      reason,
+      source,
+      createdById: actorId,
+    }));
+    rows.sort((a, b) => (a.id === reversalOfParent ? -1 : b.id === reversalOfParent ? 1 : 0));
+    await tx.folioItem.createMany({ data: rows });
   }
 
   async balance(tx: Tx, folioId: string): Promise<BalanceSnapshot> {

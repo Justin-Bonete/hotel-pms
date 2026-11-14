@@ -54,6 +54,10 @@ export const PERMISSION_CATALOG = [
   { key: 'purchasing.pay', module: 'purchasing', level: 'PROPERTY', description: 'Record supplier invoices and pay them' },
   { key: 'expense.read', module: 'expense', level: 'PROPERTY', description: 'View expenses' },
   { key: 'expense.manage', module: 'expense', level: 'PROPERTY', description: 'Record and void expenses' },
+  { key: 'pos.read', module: 'pos', level: 'PROPERTY', description: 'View POS menus, orders and sales summaries' },
+  { key: 'pos.sell', module: 'pos', level: 'PROPERTY', description: 'Ring up sales and charge them to a guest room' },
+  { key: 'pos.void', module: 'pos', level: 'PROPERTY', description: 'Void a POS sale' },
+  { key: 'pos.manage', module: 'pos', level: 'PROPERTY', description: 'Manage outlets and menu items' },
   { key: 'staff.read', module: 'staff', level: 'PROPERTY', description: 'View staff accounts' },
   { key: 'staff.manage', module: 'staff', level: 'PROPERTY', description: 'Create, edit, disable staff accounts' },
   { key: 'role.read', module: 'rbac', level: 'ORGANIZATION', description: 'View roles and permissions' },
@@ -112,6 +116,7 @@ const BUSINESS_ADMIN: readonly PermissionKey[] = [
   'inventory.read', 'inventory.manage', 'purchasing.read', 'purchasing.manage', 'purchasing.request', 'purchasing.approve',
   'purchasing.receive', 'purchasing.pay', 'expense.read', 'expense.manage',
 ];
+const POS_ADMIN: readonly PermissionKey[] = ['pos.read', 'pos.sell', 'pos.void', 'pos.manage'];
 const BILLING_ADMIN: readonly PermissionKey[] = [
   'folio.read', 'folio.charge', 'folio.adjust', 'folio.override_checkout', 'payment.take', 'payment.refund', 'tax.manage',
 ];
@@ -119,6 +124,7 @@ const FRONT_DESK_PERMISSIONS: readonly PermissionKey[] = [
   ...ROOM_OPERATIONS, 'guest.read', 'guest.manage', 'reservation.read', 'reservation.manage', 'reservation.check_in', 'rate.read',
   'folio.read', 'folio.charge', 'payment.take',
   'housekeeping.read', 'maintenance.read', 'maintenance.report',
+  'pos.read', 'pos.sell',
 ];
 
 // Operational roles only receive real permissions in the phase that introduces their module.
@@ -131,21 +137,21 @@ export const SYSTEM_ROLE_TEMPLATES: readonly SystemRoleTemplate[] = [
     description: 'Manages properties and staff',
     permissions: [
       'organization.read', 'property_group.read', 'property.read', 'property.update',
-      'staff.read', 'staff.manage', 'role.read', 'role.assign', 'audit.read', ...ROOM_ADMIN, ...RESERVATION_ADMIN, ...BILLING_ADMIN, ...OPS_ADMIN, ...BUSINESS_ADMIN,
+      'staff.read', 'staff.manage', 'role.read', 'role.assign', 'audit.read', ...ROOM_ADMIN, ...RESERVATION_ADMIN, ...BILLING_ADMIN, ...OPS_ADMIN, ...BUSINESS_ADMIN, ...POS_ADMIN,
     ],
   },
   {
     key: 'PROPERTY_MANAGER',
     name: 'Property Manager',
     description: 'Manages assigned properties',
-    permissions: ['property.read', 'property.update', 'staff.read', 'role.read', ...ROOM_ADMIN, ...RESERVATION_ADMIN, ...BILLING_ADMIN, ...OPS_ADMIN, ...BUSINESS_ADMIN],
+    permissions: ['property.read', 'property.update', 'staff.read', 'role.read', ...ROOM_ADMIN, ...RESERVATION_ADMIN, ...BILLING_ADMIN, ...OPS_ADMIN, ...BUSINESS_ADMIN, ...POS_ADMIN],
   },
   operational('FRONT_DESK', 'Front Desk', FRONT_DESK_PERMISSIONS),
   operational('RECEPTIONIST', 'Receptionist', FRONT_DESK_PERMISSIONS),
   operational('HOUSEKEEPING_SUPERVISOR', 'Housekeeping Supervisor', [...ROOM_OPERATIONS, 'housekeeping.read', 'housekeeping.work', 'housekeeping.manage', 'maintenance.read', 'maintenance.report']),
   operational('HOUSEKEEPER', 'Housekeeper', [...ROOM_OPERATIONS, 'housekeeping.read', 'housekeeping.work', 'maintenance.report']),
   operational('MAINTENANCE', 'Maintenance', [...ROOM_OPERATIONS, 'maintenance.read', 'maintenance.report', 'maintenance.work']),
-  operational('CASHIER', 'Cashier', ['property.read', 'reservation.read', 'folio.read', 'payment.take']),
-  operational('ACCOUNTANT', 'Accountant', ['property.read', 'reservation.read', 'guest.read', 'rate.read', 'folio.read', 'inventory.read', 'purchasing.read', 'purchasing.pay', 'expense.read', 'expense.manage']),
+  operational('CASHIER', 'Cashier', ['property.read', 'reservation.read', 'folio.read', 'payment.take', 'pos.read', 'pos.sell']),
+  operational('ACCOUNTANT', 'Accountant', ['property.read', 'reservation.read', 'guest.read', 'rate.read', 'folio.read', 'inventory.read', 'purchasing.read', 'purchasing.pay', 'expense.read', 'expense.manage', 'pos.read']),
   operational('INVENTORY_MANAGER', 'Inventory Manager', ['property.read', 'inventory.read', 'inventory.manage', 'purchasing.read', 'purchasing.manage', 'purchasing.request', 'purchasing.receive']),
 ];

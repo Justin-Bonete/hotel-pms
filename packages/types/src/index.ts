@@ -63,6 +63,8 @@ export * from './reservations';
 export * from './billing';
 export * from './operations';
 export * from './business';
+export * from './dashboard';
+export * from './pos';
 
 export interface AccessSummary {
   roles: Array<{ key: string; scopeType: ScopeType; scopeId: string }>;

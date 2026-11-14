@@ -229,6 +229,27 @@ enum ExpenseCategory {
   @@map("expense_category")
 }
 
+enum OutletType {
+  RESTAURANT
+  BAR
+  CAFE
+  ROOM_SERVICE
+  MINIBAR
+  SPA
+  LAUNDRY
+  OTHER
+
+  @@map("outlet_type")
+}
+
+enum PosOrderStatus {
+  PAID
+  ROOM_CHARGED
+  VOID
+
+  @@map("pos_order_status")
+}
+
 // Stored statuses only. OCCUPIED / RESERVED / DUE_OUT are derived from reservations (Phase 3).
 enum RoomStatus {
   AVAILABLE
@@ -285,6 +306,10 @@ model Organization {
   purchaseLines      PurchaseOrderLine[]
   supplierInvoices   SupplierInvoice[]
   expenses           Expense[]
+  posOutlets         PosOutlet[]
+  posItems           PosItem[]
+  posOrders          PosOrder[]
+  posOrderLines      PosOrderLine[]
 
   @@map("organizations")
 }
@@ -345,6 +370,8 @@ model Property {
   purchaseOrders     PurchaseOrder[]
   supplierInvoices   SupplierInvoice[]
   expenses           Expense[]
+  posOutlets         PosOutlet[]
+  posOrders          PosOrder[]
 
   @@unique([organizationId, slug])
   @@index([organizationId, groupId])
@@ -741,6 +768,7 @@ model Reservation {
   room         Room?        @relation(fields: [roomId], references: [id])
   ratePlan     RatePlan?    @relation(fields: [ratePlanId], references: [id])
   folio        Folio?
+  posOrders    PosOrder[]
 
   // DB-level guards (prisma/sql/rls.sql): no two active stays may overlap on the same room (exclusion
   // constraint), departure must be after arrival, adults >= 1, total >= 0.
@@ -992,6 +1020,7 @@ model InventoryItem {
   organization Organization        @relation(fields: [organizationId], references: [id])
   movements    StockMovement[]
   orderLines   PurchaseOrderLine[]
+  posItems     PosItem[]
 
   // SKU uniqueness among live items is a partial unique index in prisma/sql/rls.sql.
   @@index([organizationId])
@@ -1136,4 +1165,116 @@ model Expense {
   @@index([organizationId, propertyId, incurredOn])
   @@index([category])
   @@map("expenses")
+}
+
+// ---------------------------------------------------------------- point of sale (Phase 5b)
+// A sale is IMMUTABLE once made: order lines can be inserted but never changed, and an order can only be voided
+// (with a reason) by someone allowed to. A room charge is posted to the guest's folio in the same transaction.
+
+model PosOutlet {
+  id             String     @id @default(uuid()) @db.Uuid
+  organizationId String     @map("organization_id") @db.Uuid
+  propertyId     String     @map("property_id") @db.Uuid
+  name           String
+  type           OutletType
+  createdAt      DateTime   @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt      DateTime   @updatedAt @map("updated_at") @db.Timestamptz
+  deletedAt      DateTime?  @map("deleted_at") @db.Timestamptz
+
+  organization Organization @relation(fields: [organizationId], references: [id])
+  property     Property     @relation(fields: [propertyId], references: [id])
+  items        PosItem[]
+  orders       PosOrder[]
+
+  // Name uniqueness per property among live outlets is a partial unique index in prisma/sql/rls.sql.
+  @@index([organizationId, propertyId])
+  @@map("pos_outlets")
+}
+
+model PosItem {
+  id                String    @id @default(uuid()) @db.Uuid
+  organizationId    String    @map("organization_id") @db.Uuid
+  outletId          String    @map("outlet_id") @db.Uuid
+  name              String
+  category          String?
+  priceMinor        Int       @map("price_minor")
+  taxable           Boolean   @default(true)
+  /// When set, each sale uses up inventoryQuantity of this stock item (and is refused if there is not enough).
+  inventoryItemId   String?   @map("inventory_item_id") @db.Uuid
+  inventoryQuantity Int       @default(1) @map("inventory_quantity")
+  createdAt         DateTime  @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt         DateTime  @updatedAt @map("updated_at") @db.Timestamptz
+  deletedAt         DateTime? @map("deleted_at") @db.Timestamptz
+
+  organization  Organization   @relation(fields: [organizationId], references: [id])
+  outlet        PosOutlet      @relation(fields: [outletId], references: [id])
+  inventoryItem InventoryItem? @relation(fields: [inventoryItemId], references: [id])
+
+  @@index([organizationId, outletId])
+  @@map("pos_items")
+}
+
+model PosOrder {
+  id             String         @id @default(uuid()) @db.Uuid
+  organizationId String         @map("organization_id") @db.Uuid
+  propertyId     String         @map("property_id") @db.Uuid
+  outletId       String         @map("outlet_id") @db.Uuid
+  code           String
+  status         PosOrderStatus
+  tableLabel     String?        @map("table_label")
+  note           String?
+  /// Set for a room charge (the guest it was billed to).
+  reservationId  String?        @map("reservation_id") @db.Uuid
+  /// Set for a counter sale paid now.
+  paymentMethod  PaymentMethod? @map("payment_method")
+  subtotalMinor  Int            @map("subtotal_minor")
+  taxMinor       Int            @map("tax_minor")
+  totalMinor     Int            @map("total_minor")
+  currency       String         @db.Char(3)
+  /// Stops a double-click or a retry from creating the same sale twice.
+  idempotencyKey String?        @map("idempotency_key")
+  createdById    String?        @map("created_by_id") @db.Uuid
+  createdAt      DateTime       @default(now()) @map("created_at") @db.Timestamptz
+  voidedAt       DateTime?      @map("voided_at") @db.Timestamptz
+  voidedById     String?        @map("voided_by_id") @db.Uuid
+  voidReason     String?        @map("void_reason")
+
+  organization Organization   @relation(fields: [organizationId], references: [id])
+  property     Property       @relation(fields: [propertyId], references: [id])
+  outlet       PosOutlet      @relation(fields: [outletId], references: [id])
+  reservation  Reservation?   @relation(fields: [reservationId], references: [id])
+  lines        PosOrderLine[]
+
+  @@unique([organizationId, code])
+  @@unique([organizationId, idempotencyKey])
+  @@index([organizationId, propertyId, createdAt])
+  @@index([reservationId])
+  @@map("pos_orders")
+}
+
+model PosOrderLine {
+  id                String   @id @default(uuid()) @db.Uuid
+  organizationId    String   @map("organization_id") @db.Uuid
+  orderId           String   @map("order_id") @db.Uuid
+  posItemId         String?  @map("pos_item_id") @db.Uuid
+  /// What was sold and at what price, frozen at the moment of sale.
+  description       String
+  quantity          Int
+  unitAmountMinor   Int      @map("unit_amount_minor")
+  amountMinor       Int      @map("amount_minor")
+  taxable           Boolean
+  taxMinor          Int      @map("tax_minor")
+  /// Stock used by this line (so a void can put it back).
+  inventoryItemId   String?  @map("inventory_item_id") @db.Uuid
+  inventoryQuantity Int      @default(0) @map("inventory_quantity")
+  /// For a room charge: the folio line this became (so a void can reverse it).
+  folioItemId       String?  @map("folio_item_id") @db.Uuid
+  createdAt         DateTime @default(now()) @map("created_at") @db.Timestamptz
+
+  organization Organization @relation(fields: [organizationId], references: [id])
+  order        PosOrder     @relation(fields: [orderId], references: [id])
+
+  @@index([organizationId])
+  @@index([orderId])
+  @@map("pos_order_lines")
 }

@@ -54,6 +54,10 @@ beforeAll(async () => {
 afterAll(async () => {
   await owner.auditLog.deleteMany({ where: { organizationId: { in: [orgA, orgB] } } });
   const orgs = { organizationId: { in: [orgA, orgB] } };
+  await owner.posOrderLine.deleteMany({ where: orgs });
+  await owner.posOrder.deleteMany({ where: orgs });
+  await owner.posItem.deleteMany({ where: orgs });
+  await owner.posOutlet.deleteMany({ where: orgs });
   await owner.expense.deleteMany({ where: orgs });
   await owner.supplierInvoice.deleteMany({ where: orgs });
   await owner.stockMovement.deleteMany({ where: orgs });
@@ -253,6 +257,68 @@ describe('tenant isolation (Row-Level Security)', () => {
 
     it('tasks and tickets can never be deleted by the application role', async () => {
       await expect(asTenant(orgA, (tx) => tx.housekeepingTask.deleteMany({ where: { id: taskId } }))).rejects.toThrow();
+    });
+  });
+
+  describe('point of sale', () => {
+    let outletId = '';
+    let orderId = '';
+    const baseOrder = (over: Record<string, unknown> = {}) => ({ organizationId: orgA, propertyId: propA, outletId, code: `POS-T${suffix}${Math.random().toString(36).slice(2, 6)}`, status: 'PAID' as const, paymentMethod: 'CASH' as const, subtotalMinor: 1000, taxMinor: 120, totalMinor: 1120, currency: 'PHP', ...over });
+
+    beforeAll(async () => {
+      outletId = (await owner.posOutlet.create({ data: { organizationId: orgA, propertyId: propA, name: `Cafe ${suffix}`, type: 'CAFE' } })).id;
+      const order = await owner.posOrder.create({ data: { ...baseOrder(), lines: { create: [{ organizationId: orgA, description: 'Coffee', quantity: 2, unitAmountMinor: 500, amountMinor: 1000, taxable: true, taxMinor: 120 }] } } });
+      orderId = order.id;
+    });
+
+    it('is isolated per organization', async () => {
+      expect(await asTenant(orgB, (tx) => tx.posOrder.count({ where: { id: orderId } }))).toBe(0);
+      expect(await asTenant(orgB, (tx) => tx.posOutlet.count({ where: { id: outletId } }))).toBe(0);
+      expect(await asTenant(orgA, (tx) => tx.posOrder.count({ where: { id: orderId } }))).toBe(1);
+      await expect(asTenant(orgB, (tx) => tx.posOrder.create({ data: baseOrder() }))).rejects.toThrow();
+    });
+
+    it('the lines of a sale are frozen: never changed, never deleted', async () => {
+      await expect(asTenant(orgA, (tx) => tx.posOrderLine.updateMany({ where: { orderId }, data: { amountMinor: 1 } }))).rejects.toThrow();
+      await expect(asTenant(orgA, (tx) => tx.posOrderLine.deleteMany({ where: { orderId } }))).rejects.toThrow();
+    });
+
+    it('a sale can never be deleted by the application role', async () => {
+      await expect(asTenant(orgA, (tx) => tx.posOrder.deleteMany({ where: { id: orderId } }))).rejects.toThrow();
+    });
+
+    it('the total must equal subtotal plus tax, and a paid sale must say how it was paid', async () => {
+      await expect(owner.posOrder.create({ data: baseOrder({ totalMinor: 1000 }) })).rejects.toThrow();
+      await expect(owner.posOrder.create({ data: baseOrder({ paymentMethod: null }) })).rejects.toThrow();
+    });
+
+    it('a room charge must name the guest, and a sale is never both paid and room-charged', async () => {
+      await expect(owner.posOrder.create({ data: baseOrder({ status: 'ROOM_CHARGED', paymentMethod: null }) })).rejects.toThrow();
+    });
+
+    it('a voided sale must carry a reason and a time', async () => {
+      await expect(owner.posOrder.create({ data: baseOrder({ status: 'VOID' }) })).rejects.toThrow();
+      await expect(owner.posOrder.create({ data: baseOrder({ status: 'VOID', voidedAt: new Date(), voidReason: 'wrong order' }) })).resolves.toBeTruthy();
+    });
+
+    it('a line amount must equal quantity times price, and quantities must be positive', async () => {
+      const line = (over: Record<string, unknown>) => owner.posOrderLine.create({ data: { organizationId: orgA, orderId, description: 'X', quantity: 1, unitAmountMinor: 100, amountMinor: 100, taxable: false, taxMinor: 0, ...over } });
+      await expect(line({ amountMinor: 999 })).rejects.toThrow();
+      await expect(line({ quantity: 0, amountMinor: 0 })).rejects.toThrow();
+      await expect(line({})).resolves.toBeTruthy();
+    });
+
+    it('the same request key can never create two sales', async () => {
+      await owner.posOrder.create({ data: baseOrder({ idempotencyKey: `key-${suffix}` }) });
+      await expect(owner.posOrder.create({ data: baseOrder({ idempotencyKey: `key-${suffix}` }) })).rejects.toThrow();
+    });
+
+    it('two live outlets at one property cannot share a name, regardless of capitals', async () => {
+      await expect(owner.posOutlet.create({ data: { organizationId: orgA, propertyId: propA, name: `CAFE ${suffix}`, type: 'BAR' } })).rejects.toThrow();
+    });
+
+    it('menu prices can never be negative', async () => {
+      await expect(owner.posItem.create({ data: { organizationId: orgA, outletId, name: 'Bad', priceMinor: -1 } })).rejects.toThrow();
     });
   });
 

@@ -32,7 +32,7 @@ describe('system roles', () => {
 
   it('operational roles never receive administration permissions', () => {
     const forbiddenPrefixes = ['staff.', 'role.', 'audit.', 'organization.', 'property_group.'];
-    const forbiddenExact = ['property.create', 'property.update', 'property.delete', 'room.manage', 'room_type.manage', 'rate.manage', 'folio.adjust', 'payment.refund', 'folio.override_checkout', 'tax.manage', 'maintenance.manage', 'purchasing.approve'];
+    const forbiddenExact = ['property.create', 'property.update', 'property.delete', 'room.manage', 'room_type.manage', 'rate.manage', 'folio.adjust', 'payment.refund', 'folio.override_checkout', 'tax.manage', 'maintenance.manage', 'purchasing.approve', 'pos.void', 'pos.manage'];
     for (const key of OPERATIONAL_ROLE_KEYS) {
       for (const p of role(key).permissions) {
         expect(forbiddenPrefixes.some((prefix) => p.startsWith(prefix)), `${key} must not have ${p}`).toBe(false);
@@ -123,8 +123,8 @@ describe('system roles', () => {
     }
   });
 
-  it('a cashier can take payments and see folios only; an accountant can read but not touch money', () => {
-    expect([...role('CASHIER').permissions].sort()).toEqual(['folio.read', 'payment.take', 'property.read', 'reservation.read']);
+  it('a cashier can take payments, see folios and ring up sales, nothing more; an accountant can read but not touch money', () => {
+    expect([...role('CASHIER').permissions].sort()).toEqual(['folio.read', 'payment.take', 'pos.read', 'pos.sell', 'property.read', 'reservation.read']);
     for (const p of ['payment.take', 'folio.charge', 'payment.refund', 'folio.adjust'] as const) expect(role('ACCOUNTANT').permissions).not.toContain(p);
     expect(role('ACCOUNTANT').permissions).toContain('folio.read');
   });
@@ -133,6 +133,24 @@ describe('system roles', () => {
     for (const key of ['HOUSEKEEPER', 'HOUSEKEEPING_SUPERVISOR', 'MAINTENANCE', 'INVENTORY_MANAGER']) {
       expect(role(key).permissions.filter((p) => p.startsWith('folio.') || p.startsWith('payment.') || p.startsWith('tax.')), key).toEqual([]);
     }
+  });
+
+  it('only managers can void a sale or change the menu; the front desk and cashier can sell but not void', () => {
+    for (const r of SYSTEM_ROLE_TEMPLATES) {
+      const manager = ['OWNER', 'SUPER_ADMIN', 'GENERAL_MANAGER', 'PROPERTY_MANAGER'].includes(r.key);
+      expect(r.permissions.includes('pos.void'), `${r.key} pos.void`).toBe(manager);
+      expect(r.permissions.includes('pos.manage'), `${r.key} pos.manage`).toBe(manager);
+    }
+    for (const key of ['FRONT_DESK', 'RECEPTIONIST', 'CASHIER']) {
+      expect(role(key).permissions).toContain('pos.sell');
+    }
+  });
+
+  it('housekeeping, maintenance and inventory staff cannot ring up sales; an accountant can only look', () => {
+    for (const key of ['HOUSEKEEPER', 'HOUSEKEEPING_SUPERVISOR', 'MAINTENANCE', 'INVENTORY_MANAGER']) {
+      expect(role(key).permissions.filter((p) => p.startsWith('pos.')), key).toEqual([]);
+    }
+    expect(role('ACCOUNTANT').permissions.filter((p) => p.startsWith('pos.'))).toEqual(['pos.read']);
   });
 
   it('only managers can approve purchases; nobody in an operational role can', () => {

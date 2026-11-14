@@ -7,8 +7,8 @@ import { API_URL, refreshSession, tokenStore } from '@/lib/api';
 
 /** Which cached screens each live event makes stale. Events carry ids only; screens refetch through the normal API. */
 const STALE: Record<string, string[]> = {
-  'room.changed': ['rooms', 'calendar', 'availability', 'front-desk', 'housekeeping'],
-  'reservation.changed': ['reservations', 'reservation', 'calendar', 'availability', 'front-desk', 'rooms'],
+  'room.changed': ['rooms', 'calendar', 'availability', 'front-desk', 'housekeeping', 'dashboard-today'],
+  'reservation.changed': ['reservations', 'reservation', 'calendar', 'availability', 'front-desk', 'rooms', 'dashboard-today'],
   'housekeeping.changed': ['housekeeping', 'rooms'],
   'maintenance.changed': ['maintenance', 'rooms'],
   'folio.changed': ['folio', 'front-desk', 'reservation'],

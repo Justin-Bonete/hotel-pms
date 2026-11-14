@@ -26,7 +26,8 @@ BEGIN
     'users','user_sessions','auth_tokens','user_role_assignments','audit_logs',
     'room_types','rooms','guests','rate_plans','rate_plan_rates','reservations',
     'taxes','folios','folio_items','payments','refunds','housekeeping_tasks','maintenance_tickets',
-    'suppliers','inventory_items','stock_movements','purchase_orders','purchase_order_lines','supplier_invoices','expenses'
+    'suppliers','inventory_items','stock_movements','purchase_orders','purchase_order_lines','supplier_invoices','expenses',
+    'pos_outlets','pos_items','pos_orders','pos_order_lines'
   ] LOOP
     EXECUTE format('ALTER TABLE %I ENABLE ROW LEVEL SECURITY', t);
     EXECUTE format('DROP POLICY IF EXISTS tenant_isolation ON %I', t);
@@ -62,6 +63,7 @@ CREATE UNIQUE INDEX IF NOT EXISTS room_types_property_name_unique ON room_types 
 CREATE UNIQUE INDEX IF NOT EXISTS housekeeping_one_open_task_per_room
   ON housekeeping_tasks (room_id, type) WHERE status IN ('OPEN', 'ASSIGNED', 'IN_PROGRESS', 'CLEANED');
 
+CREATE UNIQUE INDEX IF NOT EXISTS pos_outlets_property_name_unique ON pos_outlets (property_id, lower(name)) WHERE deleted_at IS NULL;
 CREATE UNIQUE INDEX IF NOT EXISTS suppliers_org_name_unique ON suppliers (organization_id, lower(name)) WHERE deleted_at IS NULL;
 CREATE UNIQUE INDEX IF NOT EXISTS inventory_items_org_sku_unique ON inventory_items (organization_id, lower(sku)) WHERE deleted_at IS NULL;
 
@@ -82,6 +84,21 @@ BEGIN
   END IF;
   IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'reservations_guests_check') THEN
     ALTER TABLE reservations ADD CONSTRAINT reservations_guests_check CHECK (adults >= 1 AND children >= 0 AND total_minor >= 0);
+  END IF;
+  IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'pos_items_check') THEN
+    ALTER TABLE pos_items ADD CONSTRAINT pos_items_check CHECK (price_minor >= 0 AND inventory_quantity >= 1);
+  END IF;
+  IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'pos_order_lines_check') THEN
+    ALTER TABLE pos_order_lines ADD CONSTRAINT pos_order_lines_check CHECK (quantity > 0 AND unit_amount_minor >= 0 AND amount_minor >= 0 AND tax_minor >= 0 AND amount_minor = quantity * unit_amount_minor);
+  END IF;
+  IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'pos_orders_check') THEN
+    ALTER TABLE pos_orders ADD CONSTRAINT pos_orders_check CHECK (
+      subtotal_minor >= 0 AND tax_minor >= 0 AND total_minor = subtotal_minor + tax_minor
+      AND (reservation_id IS NULL OR payment_method IS NULL)
+      AND (status <> 'PAID' OR payment_method IS NOT NULL)
+      AND (status <> 'ROOM_CHARGED' OR reservation_id IS NOT NULL)
+      AND (status <> 'VOID' OR (void_reason IS NOT NULL AND voided_at IS NOT NULL))
+    );
   END IF;
   IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'stock_movements_quantity_check') THEN
     ALTER TABLE stock_movements ADD CONSTRAINT stock_movements_quantity_check CHECK (quantity <> 0);
@@ -133,7 +150,12 @@ TO pms_app;
 
 -- Folios may be opened and closed (UPDATE) but never deleted. Tasks and tickets are never deleted either.
 GRANT SELECT, INSERT, UPDATE ON folios, housekeeping_tasks, maintenance_tickets,
-  suppliers, inventory_items, purchase_orders, purchase_order_lines, supplier_invoices, expenses TO pms_app;
+  suppliers, inventory_items, purchase_orders, purchase_order_lines, supplier_invoices, expenses,
+  pos_outlets, pos_items, pos_orders TO pms_app;
+
+-- A sale's lines are frozen: inserted once, never changed or removed.
+GRANT SELECT, INSERT ON pos_order_lines TO pms_app;
+REVOKE UPDATE, DELETE, TRUNCATE ON pos_order_lines FROM pms_app;
 
 -- The STOCK LEDGER is append-only, like the money ledger: movements are never changed or removed.
 GRANT SELECT, INSERT ON stock_movements TO pms_app;

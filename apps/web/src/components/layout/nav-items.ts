@@ -23,7 +23,7 @@ export const NAV_ITEMS: NavItem[] = [
   { label: 'Housekeeping', href: '/housekeeping', icon: Sparkles, ready: true },
   { label: 'Maintenance', href: '/maintenance', icon: Wrench, ready: true },
   { label: 'Guests', href: '/guests', icon: Users, ready: true },
-  { label: 'POS', href: '/pos', icon: Store, ready: false, phase: 'Phase 5' },
+  { label: 'POS', href: '/pos', icon: Store, ready: true },
   { label: 'Inventory', href: '/inventory', icon: Package, ready: true },
   { label: 'Purchasing', href: '/purchasing', icon: ShoppingCart, ready: true },
   { label: 'Expenses', href: '/expenses', icon: Receipt, ready: true },

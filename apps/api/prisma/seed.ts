@@ -11,7 +11,7 @@
  * Only real Phase 1 data is created. No reservations, revenue, etc.
  */
 import { Prisma, PrismaClient, PropertyType, ReservationSource, ReservationStatus, RoomStatus, ScopeType, UserStatus } from '@prisma/client';
-import { PERMISSION_CATALOG, SYSTEM_ROLE_TEMPLATES, addDays, calcTaxMinor, eachNight, formatRate, nightlyRatesFrom, nightsBetween, parseDate, quoteStay, toDateString, todayIn } from '@pms/types';
+import { PERMISSION_CATALOG, SYSTEM_ROLE_TEMPLATES, addDays, calcTaxMinor, eachNight, formatRate, nightlyRatesFrom, nightsBetween, parseDate, quoteStay, toDateString, todayIn, posLineTotals } from '@pms/types';
 import { randomUUID } from 'node:crypto';
 import * as argon2 from 'argon2';
 
@@ -491,6 +491,48 @@ async function seedBusiness(organizationId: string, propertyIds: Map<string, str
   }
 }
 
+// ---------------------------------------------------------------- demo POS: outlets, menu, a few sales today
+async function seedPos(organizationId: string, propertyIds: Map<string, string>, ownerId: string) {
+  const manila = propertyIds.get('manila-grand');
+  if (!manila) return;
+  if ((await prisma.posOutlet.count({ where: { propertyId: manila } })) > 0) return;
+
+  const water = await prisma.inventoryItem.findFirst({ where: { organizationId, sku: 'BV-WATER', deletedAt: null } });
+  // [name, category, price in centavos, uses stock]
+  const menus: Array<[string, 'CAFE' | 'BAR' | 'ROOM_SERVICE', Array<[string, string, number, boolean]>]> = [
+    ['Grand Café', 'CAFE', [['Brewed coffee', 'Drinks', 12000, false], ['Cappuccino', 'Drinks', 15000, false], ['Club sandwich', 'Food', 28000, false], ['Chocolate cake', 'Dessert', 16000, false], ['Bottled water', 'Drinks', 5000, true]]],
+    ['Skyline Bar', 'BAR', [['Local beer', 'Drinks', 12000, false], ['Margarita', 'Cocktails', 25000, false], ['Bottled water', 'Drinks', 6000, true]]],
+    ['Room Service', 'ROOM_SERVICE', [['Chicken adobo meal', 'Mains', 32000, false], ['Fried rice', 'Mains', 18000, false], ['Bottled water', 'Drinks', 6000, true]]],
+  ];
+  const created = new Map<string, { id: string; items: Array<{ id: string; name: string; priceMinor: number }> }>();
+  for (const [name, type, items] of menus) {
+    const outlet = await prisma.posOutlet.create({ data: { organizationId, propertyId: manila, name, type } });
+    const rows: Array<{ id: string; name: string; priceMinor: number }> = [];
+    for (const [itemName, category, priceMinor, tracked] of items) {
+      const row = await prisma.posItem.create({ data: { organizationId, outletId: outlet.id, name: itemName, category, priceMinor, taxable: true, inventoryItemId: tracked && water ? water.id : null, inventoryQuantity: 1 } });
+      rows.push({ id: row.id, name: row.name, priceMinor: row.priceMinor });
+    }
+    created.set(name, { id: outlet.id, items: rows });
+  }
+
+  // Three counter sales today (none use tracked stock, so the demo stock counts stay as seeded).
+  const taxes = await prisma.tax.findMany({ where: { propertyId: manila, isActive: true, deletedAt: null, appliesToExtras: true }, select: { rateBps: true } });
+  const cafe = created.get('Grand Café')!;
+  const sale = async (code: string, method: 'CASH' | 'CARD', picks: Array<[string, number]>) => {
+    const specs = picks.map(([name, quantity]) => ({ item: cafe.items.find((i) => i.name === name)!, quantity }));
+    const t = posLineTotals(specs.map((s) => ({ quantity: s.quantity, unitAmountMinor: s.item.priceMinor, taxable: true })), taxes);
+    await prisma.posOrder.create({
+      data: {
+        organizationId, propertyId: manila, outletId: cafe.id, code, status: 'PAID', paymentMethod: method, subtotalMinor: t.subtotalMinor, taxMinor: t.taxMinor, totalMinor: t.totalMinor, currency: 'PHP', createdById: ownerId,
+        lines: { create: specs.map((s, i) => ({ organizationId, posItemId: s.item.id, description: s.item.name, quantity: s.quantity, unitAmountMinor: s.item.priceMinor, amountMinor: t.lines[i]!.amountMinor, taxable: true, taxMinor: t.lines[i]!.taxMinor })) },
+      },
+    });
+  };
+  await sale('POS-DEMO01', 'CASH', [['Brewed coffee', 2], ['Chocolate cake', 1]]);
+  await sale('POS-DEMO02', 'CARD', [['Club sandwich', 2], ['Cappuccino', 2]]);
+  await sale('POS-DEMO03', 'CASH', [['Cappuccino', 1]]);
+}
+
 async function seedPermissionsAndRoles() {
   for (const p of PERMISSIONS) {
     await prisma.permission.upsert({ where: { key: p.key }, update: p, create: p });
@@ -595,6 +637,7 @@ async function seedDemoOrganization() {
   const staff = await seedStaff(org.id, propertyIds, password);
   for (const [slug, propertyId] of propertyIds) await seedOperations(org.id, propertyId, slug, staff);
   await seedBusiness(org.id, propertyIds, staff, owner.id);
+  await seedPos(org.id, propertyIds, owner.id);
 
   return { org, email };
 }

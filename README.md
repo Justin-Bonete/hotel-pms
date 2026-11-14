@@ -186,3 +186,28 @@ The rules the code enforces:
 - **Paying a supplier invoice** marks it paid and records the expense in one step, exactly once.
 - **Expenses** are never deleted; a wrong entry is voided with a reason. Voided entries don't count in totals.
 - Receipt/photo attachments are "coming soon" (they need document storage).
+
+## Point of sale and the dashboard (Phase 5b)
+
+```bash
+pnpm install
+pnpm build:packages
+pnpm db:migrate     # name it: phase5b_pos
+pnpm db:rls
+pnpm db:seed        # demo outlets (Grand Café, Skyline Bar, Room Service), menus, three sales today
+pnpm test && pnpm test:int
+```
+
+If `db:migrate` says "Drift detected", run `pnpm db:reset` (development database only).
+
+Try it as `owner@abc-hospitality.test` (or `frontdesk@...`, who can sell but not void): open **POS**, tap items, then either **Pay now** or **Charge to room** (pick a guest who is checked in; check one in first from Reservations if none are).
+
+The rules the code enforces:
+- **The till never sets prices.** It sends only what was sold and how many; the server uses the menu price and the property's taxes at that moment. Changing a menu price never changes past sales.
+- **A sale is immutable.** Its lines can never be changed or deleted (database permissions). The only change allowed is a **void** with a reason, by someone with `pos.void` (managers); voids are never deleted either.
+- **Room charge** posts to the guest's bill in the same transaction, only for a guest who is checked in and whose bill is still open. The receipt total always equals what lands on the bill (same per-line tax rounding).
+- **Voiding a room charge** appends reversal lines to the bill (nothing is erased) and puts used stock back. If the bill is already closed, the void is refused with a clear message. A voided cash/card sale does not refund money: hand it back yourself.
+- **Stock-tracked items** (e.g. bottled water) use up stock on each sale and are **refused when there isn't enough**, using the same lock as the Inventory screens, so two tills can't both sell the last bottle.
+- **Pressing twice or retrying** never creates a second sale (request key).
+- **Daily report** uses the property's own day (its time zone, including daylight saving), counts voided sales separately and never inside sales.
+- **Dashboard:** Arrivals, Departures, In house, Occupancy and Dirty rooms are live. Occupancy = guests in house ÷ rooms that can be sold. Revenue, ADR and RevPAR come with analytics (they need date ranges and every revenue source).

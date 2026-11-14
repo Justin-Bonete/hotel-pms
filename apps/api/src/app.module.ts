@@ -12,9 +12,11 @@ import { HealthModule } from './modules/health/health.module';
 import { BuildingsModule } from './modules/buildings/buildings.module';
 import { PropertiesModule } from './modules/properties/properties.module';
 import { PropertyGroupsModule } from './modules/property-groups/property-groups.module';
+import { DashboardModule } from './modules/dashboard/dashboard.module';
 import { ExpensesModule } from './modules/expenses/expenses.module';
 import { FoliosModule } from './modules/folios/folios.module';
 import { InventoryModule } from './modules/inventory/inventory.module';
+import { PosModule } from './modules/pos/pos.module';
 import { PurchasingModule } from './modules/purchasing/purchasing.module';
 import { SuppliersModule } from './modules/suppliers/suppliers.module';
 import { FrontDeskModule } from './modules/frontdesk/frontdesk.module';
@@ -35,7 +37,7 @@ import { MailModule } from './modules/mail/mail.module';
     PropertiesModule, PropertyGroupsModule, BuildingsModule, RoomTypesModule, RoomsModule,
     GuestsModule, RatesModule, ReservationsModule, FoliosModule, TaxesModule,
     RealtimeModule, StaffModule, HousekeepingModule, MaintenanceModule, FrontDeskModule,
-    SuppliersModule, InventoryModule, PurchasingModule, ExpensesModule],
+    SuppliersModule, InventoryModule, PurchasingModule, ExpensesModule, DashboardModule, PosModule],
   providers: [
     { provide: APP_FILTER, useClass: AllExceptionsFilter },
     // Order matters: context first (outermost), then the response envelope.
