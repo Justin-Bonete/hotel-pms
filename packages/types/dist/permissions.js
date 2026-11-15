@@ -50,6 +50,8 @@ exports.PERMISSION_CATALOG = [
     { key: 'pos.void', module: 'pos', level: 'PROPERTY', description: 'Void a POS sale' },
     { key: 'pos.manage', module: 'pos', level: 'PROPERTY', description: 'Manage outlets and menu items' },
     { key: 'analytics.read', module: 'analytics', level: 'PROPERTY', description: 'View analytics and reports' },
+    { key: 'integration.read', module: 'integration', level: 'PROPERTY', description: 'View API keys and webhooks' },
+    { key: 'integration.manage', module: 'integration', level: 'PROPERTY', description: 'Create and revoke API keys and webhooks' },
     { key: 'staff.read', module: 'staff', level: 'PROPERTY', description: 'View staff accounts' },
     { key: 'staff.manage', module: 'staff', level: 'PROPERTY', description: 'Create, edit, disable staff accounts' },
     { key: 'role.read', module: 'rbac', level: 'ORGANIZATION', description: 'View roles and permissions' },
@@ -89,6 +91,7 @@ const BUSINESS_ADMIN = [
     'purchasing.receive', 'purchasing.pay', 'expense.read', 'expense.manage', 'analytics.read',
 ];
 const POS_ADMIN = ['pos.read', 'pos.sell', 'pos.void', 'pos.manage'];
+const INTEGRATION_ADMIN = ['integration.read', 'integration.manage'];
 const BILLING_ADMIN = [
     'folio.read', 'folio.charge', 'folio.adjust', 'folio.override_checkout', 'payment.take', 'payment.refund', 'tax.manage',
 ];
@@ -108,14 +111,14 @@ exports.SYSTEM_ROLE_TEMPLATES = [
         description: 'Manages properties and staff',
         permissions: [
             'organization.read', 'property_group.read', 'property.read', 'property.update',
-            'staff.read', 'staff.manage', 'role.read', 'role.assign', 'audit.read', ...ROOM_ADMIN, ...RESERVATION_ADMIN, ...BILLING_ADMIN, ...OPS_ADMIN, ...BUSINESS_ADMIN, ...POS_ADMIN,
+            'staff.read', 'staff.manage', 'role.read', 'role.assign', 'audit.read', ...ROOM_ADMIN, ...RESERVATION_ADMIN, ...BILLING_ADMIN, ...OPS_ADMIN, ...BUSINESS_ADMIN, ...POS_ADMIN, ...INTEGRATION_ADMIN,
         ],
     },
     {
         key: 'PROPERTY_MANAGER',
         name: 'Property Manager',
         description: 'Manages assigned properties',
-        permissions: ['property.read', 'property.update', 'staff.read', 'role.read', ...ROOM_ADMIN, ...RESERVATION_ADMIN, ...BILLING_ADMIN, ...OPS_ADMIN, ...BUSINESS_ADMIN, ...POS_ADMIN],
+        permissions: ['property.read', 'property.update', 'staff.read', 'role.read', ...ROOM_ADMIN, ...RESERVATION_ADMIN, ...BILLING_ADMIN, ...OPS_ADMIN, ...BUSINESS_ADMIN, ...POS_ADMIN, ...INTEGRATION_ADMIN],
     },
     operational('FRONT_DESK', 'Front Desk', FRONT_DESK_PERMISSIONS),
     operational('RECEPTIONIST', 'Receptionist', FRONT_DESK_PERMISSIONS),

@@ -27,7 +27,8 @@ BEGIN
     'room_types','rooms','guests','rate_plans','rate_plan_rates','reservations',
     'taxes','folios','folio_items','payments','refunds','housekeeping_tasks','maintenance_tickets',
     'suppliers','inventory_items','stock_movements','purchase_orders','purchase_order_lines','supplier_invoices','expenses',
-    'pos_outlets','pos_items','pos_orders','pos_order_lines'
+    'pos_outlets','pos_items','pos_orders','pos_order_lines',
+    'api_keys','webhook_endpoints','webhook_deliveries'
   ] LOOP
     EXECUTE format('ALTER TABLE %I ENABLE ROW LEVEL SECURITY', t);
     EXECUTE format('DROP POLICY IF EXISTS tenant_isolation ON %I', t);
@@ -84,6 +85,15 @@ BEGIN
   END IF;
   IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'reservations_guests_check') THEN
     ALTER TABLE reservations ADD CONSTRAINT reservations_guests_check CHECK (adults >= 1 AND children >= 0 AND total_minor >= 0);
+  END IF;
+  IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'api_keys_check') THEN
+    ALTER TABLE api_keys ADD CONSTRAINT api_keys_check CHECK (cardinality(property_ids) > 0 AND cardinality(scopes) > 0);
+  END IF;
+  IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'webhook_endpoints_check') THEN
+    ALTER TABLE webhook_endpoints ADD CONSTRAINT webhook_endpoints_check CHECK (cardinality(events) > 0 AND consecutive_failures >= 0);
+  END IF;
+  IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'webhook_deliveries_check') THEN
+    ALTER TABLE webhook_deliveries ADD CONSTRAINT webhook_deliveries_check CHECK (attempts >= 0);
   END IF;
   IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'pos_items_check') THEN
     ALTER TABLE pos_items ADD CONSTRAINT pos_items_check CHECK (price_minor >= 0 AND inventory_quantity >= 1);
@@ -151,7 +161,7 @@ TO pms_app;
 -- Folios may be opened and closed (UPDATE) but never deleted. Tasks and tickets are never deleted either.
 GRANT SELECT, INSERT, UPDATE ON folios, housekeeping_tasks, maintenance_tickets,
   suppliers, inventory_items, purchase_orders, purchase_order_lines, supplier_invoices, expenses,
-  pos_outlets, pos_items, pos_orders TO pms_app;
+  pos_outlets, pos_items, pos_orders, api_keys, webhook_endpoints, webhook_deliveries TO pms_app;
 
 -- A sale's lines are frozen: inserted once, never changed or removed.
 GRANT SELECT, INSERT ON pos_order_lines TO pms_app;

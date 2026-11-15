@@ -19,6 +19,7 @@ import { badRequest, conflict, notFound } from '../../common/http/errors';
 import { emptyToNull } from '../../common/text/text';
 import { PrismaService, Tx } from '../../database/prisma/prisma.service';
 import { AuditService } from '../audit/audit.service';
+import { WebhooksService } from '../webhooks/webhooks.service';
 import { RealtimeService } from '../realtime/realtime.service';
 import { orderForDisplay } from './folio-display';
 import { FolioLedger } from './folio-ledger.service';
@@ -39,6 +40,7 @@ export class FoliosService {
     private readonly ledger: FolioLedger,
     private readonly audit: AuditService,
     private readonly realtime: RealtimeService,
+    private readonly webhooks: WebhooksService,
   ) {}
 
   // ================================================================ read
@@ -156,6 +158,7 @@ export class FoliosService {
         select: { id: true },
       });
       await this.audit.record(tx, { organizationId: r.organizationId, actorId: access.userId, propertyId: r.propertyId, action: 'payment.received', entity: 'payment', entityId: payment.id, after: { reservation: r.code, amount: money(dto.amountMinor, r.currency), method: dto.method } });
+      await this.webhooks.enqueue(tx, { organizationId: r.organizationId, propertyId: r.propertyId, type: 'payment.received', data: { paymentId: payment.id, reservationId: r.id, reservationCode: r.code, amountMinor: dto.amountMinor, currency: r.currency, method: dto.method } });
       return this.view(tx, r, true);
     });
   }

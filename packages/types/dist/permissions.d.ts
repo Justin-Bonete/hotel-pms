@@ -250,6 +250,16 @@ export declare const PERMISSION_CATALOG: readonly [{
     readonly level: "PROPERTY";
     readonly description: "View analytics and reports";
 }, {
+    readonly key: "integration.read";
+    readonly module: "integration";
+    readonly level: "PROPERTY";
+    readonly description: "View API keys and webhooks";
+}, {
+    readonly key: "integration.manage";
+    readonly module: "integration";
+    readonly level: "PROPERTY";
+    readonly description: "Create and revoke API keys and webhooks";
+}, {
     readonly key: "staff.read";
     readonly module: "staff";
     readonly level: "PROPERTY";

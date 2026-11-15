@@ -9,3 +9,4 @@ export * from './operations';
 export * from './business';
 export * from './pos';
 export * from './analytics';
+export * from './integrations';

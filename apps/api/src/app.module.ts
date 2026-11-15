@@ -13,16 +13,20 @@ import { BuildingsModule } from './modules/buildings/buildings.module';
 import { PropertiesModule } from './modules/properties/properties.module';
 import { PropertyGroupsModule } from './modules/property-groups/property-groups.module';
 import { AnalyticsModule } from './modules/analytics/analytics.module';
+import { ApiKeysModule } from './modules/api-keys/api-keys.module';
+import { CryptoModule } from './common/crypto/crypto.service';
 import { DashboardModule } from './modules/dashboard/dashboard.module';
 import { ExpensesModule } from './modules/expenses/expenses.module';
 import { FoliosModule } from './modules/folios/folios.module';
 import { InventoryModule } from './modules/inventory/inventory.module';
 import { PosModule } from './modules/pos/pos.module';
+import { PublicApiModule } from './modules/public-api/public-api.module';
 import { PurchasingModule } from './modules/purchasing/purchasing.module';
 import { SuppliersModule } from './modules/suppliers/suppliers.module';
 import { FrontDeskModule } from './modules/frontdesk/frontdesk.module';
 import { HousekeepingModule } from './modules/housekeeping/housekeeping.module';
 import { MaintenanceModule } from './modules/maintenance/maintenance.module';
+import { WebhooksModule } from './modules/webhooks/webhooks.module';
 import { RealtimeModule } from './modules/realtime/realtime.module';
 import { StaffModule } from './modules/staff/staff.module';
 import { TaxesModule } from './modules/taxes/taxes.module';
@@ -38,7 +42,8 @@ import { MailModule } from './modules/mail/mail.module';
     PropertiesModule, PropertyGroupsModule, BuildingsModule, RoomTypesModule, RoomsModule,
     GuestsModule, RatesModule, ReservationsModule, FoliosModule, TaxesModule,
     RealtimeModule, StaffModule, HousekeepingModule, MaintenanceModule, FrontDeskModule,
-    SuppliersModule, InventoryModule, PurchasingModule, ExpensesModule, DashboardModule, PosModule, AnalyticsModule],
+    SuppliersModule, InventoryModule, PurchasingModule, ExpensesModule, DashboardModule, PosModule, AnalyticsModule,
+    CryptoModule, WebhooksModule, ApiKeysModule, PublicApiModule],
   providers: [
     { provide: APP_FILTER, useClass: AllExceptionsFilter },
     // Order matters: context first (outermost), then the response envelope.

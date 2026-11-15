@@ -32,6 +32,9 @@ import { PrismaService, Tx } from '../../database/prisma/prisma.service';
 import { AuditService } from '../audit/audit.service';
 import { FolioLedger } from '../folios/folio-ledger.service';
 import { HousekeepingAutomation } from '../housekeeping/housekeeping-automation.service';
+import { WebhooksService } from '../webhooks/webhooks.service';
+import { reservationEventData } from '../webhooks/webhook-events';
+import type { Actor } from './reservation-actor';
 import { RealtimeService } from '../realtime/realtime.service';
 import { canBook, nightlyAvailability } from './availability';
 import { reservationDetailInclude, reservationInclude, toReservationView } from './reservation.mapper';
@@ -48,6 +51,7 @@ export class ReservationsService {
     private readonly ledger: FolioLedger,
     private readonly realtime: RealtimeService,
     private readonly housekeeping: HousekeepingAutomation,
+    private readonly webhooks: WebhooksService,
   ) {}
 
   // ================================================================ reads
@@ -179,7 +183,15 @@ export class ReservationsService {
   // ================================================================ create
   async create(propertyId: string, dto: CreateReservationInput, access: AccessContext): Promise<ReservationView> {
     assertCan(access, 'reservation.manage', propertyId);
-    return this.prisma.forTenant(async (tx) => {
+    return this.createAs({ organizationId: access.organizationId, userId: access.userId }, propertyId, dto);
+  }
+
+  /**
+   * The one place a reservation is created. `actor.userId` is null (and `via` says which API key) when the booking comes
+   * from the public booking API, so the audit trail never blames a staff member for something they did not do.
+   */
+  async createAs(actor: Actor, propertyId: string, dto: CreateReservationInput): Promise<ReservationView> {
+    return this.prisma.forOrganization(actor.organizationId, async (tx) => {
       const property = await this.requireProperty(tx, propertyId);
       const today = todayIn(property.timezone);
       if (dto.arrivalDate < today) throw badRequest('ARRIVAL_IN_PAST', `Arrival can't be before today (${today}).`);
@@ -193,7 +205,7 @@ export class ReservationsService {
       }
 
       const { plan, quote } = await this.resolveQuote(tx, propertyId, roomType.id, roomType.name, dto.ratePlanId, dto.arrivalDate, dto.departureDate);
-      const guestId = await this.resolveGuest(tx, dto, access);
+      const guestId = await this.resolveGuest(tx, dto, actor);
 
       if (dto.status !== 'INQUIRY') {
         await this.ensureAvailability(tx, { propertyId, roomTypeId: roomType.id, typeName: roomType.name, arrival: dto.arrivalDate, departure: dto.departureDate });
@@ -201,7 +213,7 @@ export class ReservationsService {
 
       const row = await tx.reservation.create({
         data: {
-          organizationId: access.organizationId,
+          organizationId: actor.organizationId,
           propertyId,
           code: await this.newCode(tx),
           guestId,
@@ -219,21 +231,23 @@ export class ReservationsService {
           currency: property.currency,
           specialRequests: emptyToNull(dto.specialRequests) ?? null,
           notes: emptyToNull(dto.notes) ?? null,
-          createdById: access.userId,
+          createdById: actor.userId,
         },
         include: reservationInclude,
       });
       await this.audit.record(tx, {
-        organizationId: access.organizationId,
-        actorId: access.userId,
+        organizationId: actor.organizationId,
+        actorId: actor.userId,
         propertyId,
         action: 'reservation.created',
         entity: 'reservation',
         entityId: row.id,
-        after: { code: row.code, status: row.status, arrival: dto.arrivalDate, departure: dto.departureDate, roomType: roomType.name, totalMinor: quote.totalMinor },
+        after: { code: row.code, status: row.status, arrival: dto.arrivalDate, departure: dto.departureDate, roomType: roomType.name, totalMinor: quote.totalMinor, ...(actor.via ? { via: actor.via } : {}) },
       });
-      this.realtime.emit(access.organizationId, 'reservation.changed', propertyId, [row.id]);
-      return toReservationView(row);
+      this.realtime.emit(actor.organizationId, 'reservation.changed', propertyId, [row.id]);
+      const view = toReservationView(row);
+      await this.webhooks.enqueue(tx, { organizationId: actor.organizationId, propertyId, type: 'reservation.created', data: reservationEventData(view) });
+      return view;
     });
   }
 
@@ -480,7 +494,11 @@ export class ReservationsService {
       if (dto.action === 'check_in' || dto.action === 'check_out') this.realtime.emit(access.organizationId, 'folio.changed', r.propertyId, [id]);
 
       const fresh = await tx.reservation.findFirstOrThrow({ where: { id }, include: reservationInclude });
-      return toReservationView(fresh);
+      const view = toReservationView(fresh);
+      if (view.status !== r.status) {
+        await this.webhooks.enqueue(tx, { organizationId: access.organizationId, propertyId: r.propertyId, type: 'reservation.status_changed', data: { ...reservationEventData(view), previousStatus: r.status } });
+      }
+      return view;
     });
   }
 
@@ -525,7 +543,7 @@ export class ReservationsService {
     return { plan, quote: quoteStay(arrival, departure, { nightlyRateMinor: rate.nightlyRateMinor, weekendRateMinor: rate.weekendRateMinor }) };
   }
 
-  private async resolveGuest(tx: Tx, dto: CreateReservationInput, access: AccessContext): Promise<string> {
+  private async resolveGuest(tx: Tx, dto: CreateReservationInput, actor: Actor): Promise<string> {
     if (dto.guestId) {
       const guest = await tx.guest.findFirst({ where: { id: dto.guestId, deletedAt: null }, select: { id: true } });
       if (!guest) throw badRequest('INVALID_GUEST', 'That guest was not found.');
@@ -538,7 +556,7 @@ export class ReservationsService {
     }
     const created = await tx.guest.create({
       data: {
-        organizationId: access.organizationId,
+        organizationId: actor.organizationId,
         firstName: g.firstName,
         lastName: g.lastName,
         email,
@@ -550,7 +568,7 @@ export class ReservationsService {
       },
       select: { id: true },
     });
-    await this.audit.record(tx, { organizationId: access.organizationId, actorId: access.userId, action: 'guest.created', entity: 'guest', entityId: created.id, after: { name: `${g.firstName} ${g.lastName}`, via: 'reservation' } });
+    await this.audit.record(tx, { organizationId: actor.organizationId, actorId: actor.userId, action: 'guest.created', entity: 'guest', entityId: created.id, after: { name: `${g.firstName} ${g.lastName}`, via: 'reservation' } });
     return created.id;
   }
 

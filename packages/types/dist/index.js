@@ -24,4 +24,5 @@ __exportStar(require("./business"), exports);
 __exportStar(require("./dashboard"), exports);
 __exportStar(require("./pos"), exports);
 __exportStar(require("./analytics"), exports);
+__exportStar(require("./integrations"), exports);
 //# sourceMappingURL=index.js.map

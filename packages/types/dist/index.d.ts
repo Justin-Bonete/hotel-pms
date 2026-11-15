@@ -74,6 +74,7 @@ export * from './business';
 export * from './dashboard';
 export * from './pos';
 export * from './analytics';
+export * from './integrations';
 export interface AccessSummary {
     roles: Array<{
         key: string;

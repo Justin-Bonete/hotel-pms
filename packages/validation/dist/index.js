@@ -25,4 +25,5 @@ __exportStar(require("./operations"), exports);
 __exportStar(require("./business"), exports);
 __exportStar(require("./pos"), exports);
 __exportStar(require("./analytics"), exports);
+__exportStar(require("./integrations"), exports);
 //# sourceMappingURL=index.js.map
