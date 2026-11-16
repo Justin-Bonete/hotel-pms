@@ -19,6 +19,7 @@ const errors_1 = require("../../common/http/errors");
 const text_1 = require("../../common/text/text");
 const prisma_service_1 = require("../../database/prisma/prisma.service");
 const audit_service_1 = require("../audit/audit.service");
+const webhooks_service_1 = require("../webhooks/webhooks.service");
 const realtime_service_1 = require("../realtime/realtime.service");
 const folio_display_1 = require("./folio-display");
 const folio_ledger_service_1 = require("./folio-ledger.service");
@@ -33,11 +34,13 @@ let FoliosService = class FoliosService {
     ledger;
     audit;
     realtime;
-    constructor(prisma, ledger, audit, realtime) {
+    webhooks;
+    constructor(prisma, ledger, audit, realtime, webhooks) {
         this.prisma = prisma;
         this.ledger = ledger;
         this.audit = audit;
         this.realtime = realtime;
+        this.webhooks = webhooks;
     }
     // ================================================================ read
     async get(reservationId, access) {
@@ -154,6 +157,7 @@ let FoliosService = class FoliosService {
                 select: { id: true },
             });
             await this.audit.record(tx, { organizationId: r.organizationId, actorId: access.userId, propertyId: r.propertyId, action: 'payment.received', entity: 'payment', entityId: payment.id, after: { reservation: r.code, amount: money(dto.amountMinor, r.currency), method: dto.method } });
+            await this.webhooks.enqueue(tx, { organizationId: r.organizationId, propertyId: r.propertyId, type: 'payment.received', data: { paymentId: payment.id, reservationId: r.id, reservationCode: r.code, amountMinor: dto.amountMinor, currency: r.currency, method: dto.method } });
             return this.view(tx, r, true);
         });
     }
@@ -258,6 +262,7 @@ exports.FoliosService = FoliosService = __decorate([
     __metadata("design:paramtypes", [prisma_service_1.PrismaService,
         folio_ledger_service_1.FolioLedger,
         audit_service_1.AuditService,
-        realtime_service_1.RealtimeService])
+        realtime_service_1.RealtimeService,
+        webhooks_service_1.WebhooksService])
 ], FoliosService);
 //# sourceMappingURL=folios.service.js.map

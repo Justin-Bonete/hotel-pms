@@ -241,6 +241,21 @@ export declare class RbacController {
         readonly level: "PROPERTY";
         readonly description: "Manage outlets and menu items";
     }, {
+        readonly key: "analytics.read";
+        readonly module: "analytics";
+        readonly level: "PROPERTY";
+        readonly description: "View analytics and reports";
+    }, {
+        readonly key: "integration.read";
+        readonly module: "integration";
+        readonly level: "PROPERTY";
+        readonly description: "View API keys and webhooks";
+    }, {
+        readonly key: "integration.manage";
+        readonly module: "integration";
+        readonly level: "PROPERTY";
+        readonly description: "Create and revoke API keys and webhooks";
+    }, {
         readonly key: "staff.read";
         readonly module: "staff";
         readonly level: "PROPERTY";

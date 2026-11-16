@@ -24,13 +24,13 @@ export interface BalanceSnapshot {
 export declare class FolioLedger {
     /** One folio per reservation, created on first need (deposit, charge or check-in). */
     ensureFolio(tx: Tx, stay: Pick<StayForBilling, 'id' | 'organizationId' | 'propertyId' | 'currency'>): Promise<{
-        id: string;
         organizationId: string;
         status: import("@prisma/client").$Enums.FolioStatus;
-        currency: string;
+        id: string;
+        propertyId: string;
         createdAt: Date;
         updatedAt: Date;
-        propertyId: string;
+        currency: string;
         reservationId: string;
         roomChargesPostedAt: Date | null;
         closedAt: Date | null;

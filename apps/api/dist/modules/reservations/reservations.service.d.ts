@@ -6,6 +6,8 @@ import { PrismaService } from '../../database/prisma/prisma.service';
 import { AuditService } from '../audit/audit.service';
 import { FolioLedger } from '../folios/folio-ledger.service';
 import { HousekeepingAutomation } from '../housekeeping/housekeeping-automation.service';
+import { WebhooksService } from '../webhooks/webhooks.service';
+import type { Actor } from './reservation-actor';
 import { RealtimeService } from '../realtime/realtime.service';
 export declare class ReservationsService {
     private readonly prisma;
@@ -13,12 +15,18 @@ export declare class ReservationsService {
     private readonly ledger;
     private readonly realtime;
     private readonly housekeeping;
-    constructor(prisma: PrismaService, audit: AuditService, ledger: FolioLedger, realtime: RealtimeService, housekeeping: HousekeepingAutomation);
+    private readonly webhooks;
+    constructor(prisma: PrismaService, audit: AuditService, ledger: FolioLedger, realtime: RealtimeService, housekeeping: HousekeepingAutomation, webhooks: WebhooksService);
     list(query: ReservationsQuery, access: AccessContext): Promise<Paginated<ReservationView>>;
     get(id: string, access: AccessContext): Promise<ReservationView>;
     calendar(propertyId: string, query: RangeQuery, access: AccessContext): Promise<CalendarView>;
     availability(propertyId: string, query: RangeQuery, access: AccessContext): Promise<AvailabilityView>;
     create(propertyId: string, dto: CreateReservationInput, access: AccessContext): Promise<ReservationView>;
+    /**
+     * The one place a reservation is created. `actor.userId` is null (and `via` says which API key) when the booking comes
+     * from the public booking API, so the audit trail never blames a staff member for something they did not do.
+     */
+    createAs(actor: Actor, propertyId: string, dto: CreateReservationInput): Promise<ReservationView>;
     update(id: string, dto: UpdateReservationInput, access: AccessContext): Promise<ReservationView>;
     /** An in-house guest stays longer. The room must be free, the extra nights are priced from the rate plan and billed to the folio. */
     extend(id: string, dto: ExtendStayInput, access: AccessContext): Promise<ReservationView>;

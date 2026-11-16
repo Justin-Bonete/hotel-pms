@@ -3,6 +3,7 @@ import type { AdjustmentInput, ChargeInput, PaymentInput, RefundInput, VoidInput
 import type { AccessContext } from '../../common/access/access-context';
 import { PrismaService } from '../../database/prisma/prisma.service';
 import { AuditService } from '../audit/audit.service';
+import { WebhooksService } from '../webhooks/webhooks.service';
 import { RealtimeService } from '../realtime/realtime.service';
 import { FolioLedger } from './folio-ledger.service';
 export declare class FoliosService {
@@ -10,7 +11,8 @@ export declare class FoliosService {
     private readonly ledger;
     private readonly audit;
     private readonly realtime;
-    constructor(prisma: PrismaService, ledger: FolioLedger, audit: AuditService, realtime: RealtimeService);
+    private readonly webhooks;
+    constructor(prisma: PrismaService, ledger: FolioLedger, audit: AuditService, realtime: RealtimeService, webhooks: WebhooksService);
     get(reservationId: string, access: AccessContext): Promise<FolioView>;
     addCharge(reservationId: string, dto: ChargeInput, key: string | undefined, access: AccessContext): Promise<FolioView>;
     addAdjustment(reservationId: string, dto: AdjustmentInput, access: AccessContext): Promise<FolioView>;

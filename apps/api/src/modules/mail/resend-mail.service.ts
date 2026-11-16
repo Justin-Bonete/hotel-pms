@@ -2,19 +2,7 @@ import { Inject, Injectable, Logger } from '@nestjs/common';
 import { ENV } from '../../config/config.module';
 import type { Env } from '../../config/env';
 import { MailMessage, MailService } from './mail.service';
-
-export interface ResendRequest {
-  url: string;
-  init: { method: 'POST'; headers: Record<string, string>; body: string };
-}
-
-/** Builds the request for resend.com's API. Separate from sending so it can be tested without the network. */
-export function buildResendRequest(apiKey: string, from: string, message: MailMessage): ResendRequest {
-  return {
-    url: 'https://api.resend.com/emails',
-    init: { method: 'POST', headers: { Authorization: `Bearer ${apiKey}`, 'Content-Type': 'application/json' }, body: JSON.stringify({ from, to: [message.to], subject: message.subject, text: message.text }) },
-  };
-}
+import { buildResendRequest } from './resend-request';
 
 /**
  * Real email through resend.com. Best effort on purpose: a failure is logged but never thrown, so a password-reset request

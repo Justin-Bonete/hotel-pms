@@ -14,16 +14,17 @@ Update this file at the end of every phase so nothing is forgotten. Tick things 
 | 5a Business | `phase5a-business` | Inventory (stock ledger), suppliers, purchasing (approve, receive, invoice, pay), expenses |
 | 5b POS | `phase5b-pos` | POS outlets/menus/sales, room charges, voids, daily report, dashboard "Today" numbers |
 | 6 Analytics | `phase6-analytics` | Revenue, Occupancy, ADR, RevPAR, trends, previous-period comparison, property comparison, 5 reports with CSV export |
+| 7a Integrations | `phase7a-integrations` | API keys, public booking API (availability, book, look up), signed webhooks with retries and a delivery log, real email through resend.com |
 
 ## Still to build (in order)
 
-### Phase 7: Integrations
-- [ ] API keys and outgoing webhooks (events: reservation created/changed, check-in/out, payment)
-- [ ] Public booking engine API (availability + book), with rate limiting
-- [ ] Channel manager layer (OTA availability/rate/reservation sync) behind a connector interface
-- [ ] Payment gateway connector (card/e-wallet) behind a connector interface
-- [ ] Real email and SMS delivery (today emails only print in the API console)
-- [ ] Accounting export (CSV/Excel of folios, payments, expenses)
+### Phase 7b: provider connectors (need YOUR accounts, so they wait for you)
+- [ ] Channel manager / OTA sync (availability, rates, reservations) behind a connector interface
+- [ ] Payment gateway connector (card / e-wallet, for example PayMongo, Xendit, Maya) and taking a deposit at online booking
+- [ ] SMS delivery (for example Semaphore or Twilio)
+- [ ] Accounting export (CSV/Excel ledger of folios, payments and expenses)
+- [ ] Allowed-origins per API key (so a key can be used safely from a browser widget)
+- [ ] More webhook events (check-in/out detail, housekeeping, maintenance, inventory low-stock)
 
 ### Phase 8: Advanced
 - [ ] Automation rules (e.g. "when a room is dirty for 2 hours, alert the supervisor")
@@ -55,6 +56,11 @@ Update this file at the end of every phase so nothing is forgotten. Tick things 
 - POS: a voided cash/card sale **does not refund money**; a room charge on an already-closed bill can't be voided from the POS.
 - Purchasing: self-approval is allowed only when nobody else could approve at that property (audited).
 - The reservation `PENDING` status does not count toward occupancy.
+- **Webhooks are delivered at least once**: a receiver must ignore an event id it has already seen. Messages can arrive out of order after retries.
+- **The booking API is for servers.** A key must never be placed in web page JavaScript. There is no browser (CORS) access to it yet.
+- Online bookings start **PENDING** (they hold the room but the hotel must confirm) unless the key is set to auto-confirm. No payment is taken at booking yet.
+- In development webhooks may point at localhost for testing; in production private-network addresses are refused (checked again at every connection).
+- Email is plain text through resend.com only; no templates or HTML yet. Without `MAIL_PROVIDER=resend` emails print in the API console.
 - Root `pnpm dev` crashes on the author's Windows machine; run `pnpm dev:api` and `pnpm dev:web` in two terminals.
 
 ## Migration names (so they are never forgotten)
@@ -65,15 +71,17 @@ Update this file at the end of every phase so nothing is forgotten. Tick things 
 | Phase 5a | `phase5a_business` |
 | Phase 5b | `phase5b_pos` |
 | Phase 6 | none (no database change) |
+| Phase 7a | `phase7a_integrations` |
 | Applying 4 + 5a + 5b together in one go | `phase5_operations_business_pos` |
 
 Names are lowercase with underscores. Never rename a migration that has been applied to a database that holds real data.
 
 ## Every phase: the apply checklist
 1. Copy the zip over the project folder.
-2. `pnpm install` then `pnpm build:packages`
-3. `pnpm db:migrate` (only when the phase says it changes the database), then `pnpm db:rls`, then `pnpm db:seed`
-4. `pnpm test` and `pnpm test:int`
-5. Restart the TypeScript server in VS Code (it caches old types).
-6. If "Drift detected": `pnpm db:reset` (development database only; it erases local data).
-7. `git add -A`, `git commit`, `git pull --rebase`, `git push`. Never `git push --force`.
+2. **Stop the dev servers** (Ctrl+C in both terminals): on Windows a running API locks the Prisma files and `migrate` fails with EPERM.
+3. `pnpm install` then `pnpm build:packages`
+4. `pnpm db:migrate` (this also regenerates the Prisma client, which fixes red errors like "Property 'apiKey' does not exist"; only when the phase says it changes the database), then `pnpm db:rls`, then `pnpm db:seed`
+5. `pnpm test` and `pnpm test:int`
+6. Start `pnpm dev:api` and `pnpm dev:web` again and restart the TypeScript server in VS Code (it caches old types).
+7. If "Drift detected": `pnpm db:reset` (development database only; it erases local data).
+8. `git add -A`, `git commit`, `git pull --rebase`, `git push`. Never `git push --force`.

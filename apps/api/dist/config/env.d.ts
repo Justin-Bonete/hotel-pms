@@ -8,6 +8,11 @@ declare const schema: z.ZodEffects<z.ZodObject<{
     JWT_ACCESS_SECRET: z.ZodString;
     ACCESS_TOKEN_TTL: z.ZodDefault<z.ZodString>;
     REFRESH_TOKEN_TTL_DAYS: z.ZodDefault<z.ZodNumber>;
+    MAIL_PROVIDER: z.ZodDefault<z.ZodEnum<["console", "resend"]>>;
+    RESEND_API_KEY: z.ZodOptional<z.ZodString>;
+    MAIL_FROM: z.ZodOptional<z.ZodString>;
+    DATA_ENCRYPTION_KEY: z.ZodOptional<z.ZodString>;
+    WEBHOOK_DISPATCH_INTERVAL_MS: z.ZodDefault<z.ZodNumber>;
     TRUST_PROXY: z.ZodEffects<z.ZodDefault<z.ZodEnum<["true", "false"]>>, boolean, "true" | "false" | undefined>;
 }, "strip", z.ZodTypeAny, {
     NODE_ENV: "development" | "test" | "production";
@@ -18,7 +23,12 @@ declare const schema: z.ZodEffects<z.ZodObject<{
     JWT_ACCESS_SECRET: string;
     ACCESS_TOKEN_TTL: string;
     REFRESH_TOKEN_TTL_DAYS: number;
+    MAIL_PROVIDER: "console" | "resend";
+    WEBHOOK_DISPATCH_INTERVAL_MS: number;
     TRUST_PROXY: boolean;
+    RESEND_API_KEY?: string | undefined;
+    MAIL_FROM?: string | undefined;
+    DATA_ENCRYPTION_KEY?: string | undefined;
 }, {
     WEB_ORIGIN: string;
     APP_DATABASE_URL: string;
@@ -28,6 +38,11 @@ declare const schema: z.ZodEffects<z.ZodObject<{
     API_PORT?: number | undefined;
     ACCESS_TOKEN_TTL?: string | undefined;
     REFRESH_TOKEN_TTL_DAYS?: number | undefined;
+    MAIL_PROVIDER?: "console" | "resend" | undefined;
+    RESEND_API_KEY?: string | undefined;
+    MAIL_FROM?: string | undefined;
+    DATA_ENCRYPTION_KEY?: string | undefined;
+    WEBHOOK_DISPATCH_INTERVAL_MS?: number | undefined;
     TRUST_PROXY?: "true" | "false" | undefined;
 }>, {
     NODE_ENV: "development" | "test" | "production";
@@ -38,7 +53,12 @@ declare const schema: z.ZodEffects<z.ZodObject<{
     JWT_ACCESS_SECRET: string;
     ACCESS_TOKEN_TTL: string;
     REFRESH_TOKEN_TTL_DAYS: number;
+    MAIL_PROVIDER: "console" | "resend";
+    WEBHOOK_DISPATCH_INTERVAL_MS: number;
     TRUST_PROXY: boolean;
+    RESEND_API_KEY?: string | undefined;
+    MAIL_FROM?: string | undefined;
+    DATA_ENCRYPTION_KEY?: string | undefined;
 }, {
     WEB_ORIGIN: string;
     APP_DATABASE_URL: string;
@@ -48,6 +68,11 @@ declare const schema: z.ZodEffects<z.ZodObject<{
     API_PORT?: number | undefined;
     ACCESS_TOKEN_TTL?: string | undefined;
     REFRESH_TOKEN_TTL_DAYS?: number | undefined;
+    MAIL_PROVIDER?: "console" | "resend" | undefined;
+    RESEND_API_KEY?: string | undefined;
+    MAIL_FROM?: string | undefined;
+    DATA_ENCRYPTION_KEY?: string | undefined;
+    WEBHOOK_DISPATCH_INTERVAL_MS?: number | undefined;
     TRUST_PROXY?: "true" | "false" | undefined;
 }>;
 export type Env = z.infer<typeof schema>;

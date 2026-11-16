@@ -8,14 +8,16 @@ var __decorate = (this && this.__decorate) || function (decorators, target, key,
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.MailModule = void 0;
 const common_1 = require("@nestjs/common");
+const config_module_1 = require("../../config/config.module");
 const mail_service_1 = require("./mail.service");
+const resend_mail_service_1 = require("./resend-mail.service");
 let MailModule = class MailModule {
 };
 exports.MailModule = MailModule;
 exports.MailModule = MailModule = __decorate([
     (0, common_1.Global)(),
     (0, common_1.Module)({
-        providers: [{ provide: mail_service_1.MailService, useClass: mail_service_1.ConsoleMailService }],
+        providers: [{ provide: mail_service_1.MailService, inject: [config_module_1.ENV], useFactory: (env) => (env.MAIL_PROVIDER === 'resend' ? new resend_mail_service_1.ResendMailService(env) : new mail_service_1.ConsoleMailService(env)) }],
         exports: [mail_service_1.MailService],
     })
 ], MailModule);

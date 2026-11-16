@@ -144,6 +144,18 @@ const role = (key) => {
         }
         (0, vitest_1.expect)(role('ACCOUNTANT').permissions.filter((p) => p.startsWith('pos.'))).toEqual(['pos.read']);
     });
+    (0, vitest_1.it)('only managers can create API keys and webhooks; no operational role (including the accountant) can even see them', () => {
+        for (const r of types_1.SYSTEM_ROLE_TEMPLATES) {
+            const manager = ['OWNER', 'SUPER_ADMIN', 'GENERAL_MANAGER', 'PROPERTY_MANAGER'].includes(r.key);
+            (0, vitest_1.expect)(r.permissions.includes('integration.manage'), `${r.key} manage`).toBe(manager);
+            (0, vitest_1.expect)(r.permissions.includes('integration.read'), `${r.key} read`).toBe(manager);
+        }
+    });
+    (0, vitest_1.it)('only managers and the accountant can see analytics; operational staff cannot', () => {
+        for (const r of types_1.SYSTEM_ROLE_TEMPLATES) {
+            (0, vitest_1.expect)(r.permissions.includes('analytics.read'), r.key).toBe(['OWNER', 'SUPER_ADMIN', 'GENERAL_MANAGER', 'PROPERTY_MANAGER', 'ACCOUNTANT'].includes(r.key));
+        }
+    });
     (0, vitest_1.it)('only managers can approve purchases; nobody in an operational role can', () => {
         for (const r of types_1.SYSTEM_ROLE_TEMPLATES) {
             (0, vitest_1.expect)(r.permissions.includes('purchasing.approve'), r.key).toBe(['OWNER', 'SUPER_ADMIN', 'GENERAL_MANAGER', 'PROPERTY_MANAGER'].includes(r.key));

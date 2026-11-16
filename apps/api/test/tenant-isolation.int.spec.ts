@@ -54,6 +54,9 @@ beforeAll(async () => {
 afterAll(async () => {
   await owner.auditLog.deleteMany({ where: { organizationId: { in: [orgA, orgB] } } });
   const orgs = { organizationId: { in: [orgA, orgB] } };
+  await owner.webhookDelivery.deleteMany({ where: orgs });
+  await owner.webhookEndpoint.deleteMany({ where: orgs });
+  await owner.apiKey.deleteMany({ where: orgs });
   await owner.posOrderLine.deleteMany({ where: orgs });
   await owner.posOrder.deleteMany({ where: orgs });
   await owner.posItem.deleteMany({ where: orgs });
@@ -257,6 +260,45 @@ describe('tenant isolation (Row-Level Security)', () => {
 
     it('tasks and tickets can never be deleted by the application role', async () => {
       await expect(asTenant(orgA, (tx) => tx.housekeepingTask.deleteMany({ where: { id: taskId } }))).rejects.toThrow();
+    });
+  });
+
+  describe('integrations (API keys and webhooks)', () => {
+    let keyId = '';
+    let endpointId = '';
+    const keyHash = `hash-${suffix}`;
+
+    beforeAll(async () => {
+      keyId = (await owner.apiKey.create({ data: { organizationId: orgA, name: 'Site', prefix: 'pmsk_live_abcd', keyHash, propertyIds: [propA], scopes: ['availability:read'] } })).id;
+      endpointId = (await owner.webhookEndpoint.create({ data: { organizationId: orgA, url: 'https://example.com/hook', secretEnc: 'v1:x:y:z', events: ['*'] } })).id;
+    });
+
+    it('is isolated per organization: another hotel can neither see nor look up a key by its hash', async () => {
+      expect(await asTenant(orgB, (tx) => tx.apiKey.count({ where: { id: keyId } }))).toBe(0);
+      expect(await asTenant(orgB, (tx) => tx.apiKey.findFirst({ where: { keyHash } }))).toBeNull();
+      expect(await asTenant(orgB, (tx) => tx.webhookEndpoint.count({ where: { id: endpointId } }))).toBe(0);
+      expect(await asTenant(orgA, (tx) => tx.apiKey.count({ where: { id: keyId } }))).toBe(1);
+    });
+
+    it('cannot create a key or endpoint on behalf of another organization', async () => {
+      await expect(asTenant(orgB, (tx) => tx.apiKey.create({ data: { organizationId: orgA, name: 'x', prefix: 'p', keyHash: `h2-${suffix}`, propertyIds: [propA], scopes: ['availability:read'] } }))).rejects.toThrow();
+      await expect(asTenant(orgB, (tx) => tx.webhookEndpoint.create({ data: { organizationId: orgA, url: 'https://example.com', secretEnc: 's', events: ['*'] } }))).rejects.toThrow();
+    });
+
+    it('a key hash is unique, and a key must name at least one property and one permission', async () => {
+      await expect(owner.apiKey.create({ data: { organizationId: orgA, name: 'dup', prefix: 'p', keyHash, propertyIds: [propA], scopes: ['availability:read'] } })).rejects.toThrow();
+      await expect(owner.apiKey.create({ data: { organizationId: orgA, name: 'none', prefix: 'p', keyHash: `h3-${suffix}`, propertyIds: [], scopes: ['availability:read'] } })).rejects.toThrow();
+      await expect(owner.apiKey.create({ data: { organizationId: orgA, name: 'noscope', prefix: 'p', keyHash: `h4-${suffix}`, propertyIds: [propA], scopes: [] } })).rejects.toThrow();
+    });
+
+    it('an endpoint must subscribe to something, and attempt counts can never be negative', async () => {
+      await expect(owner.webhookEndpoint.create({ data: { organizationId: orgA, url: 'https://example.com', secretEnc: 's', events: [] } })).rejects.toThrow();
+      await expect(owner.webhookDelivery.create({ data: { organizationId: orgA, endpointId, eventId: '00000000-0000-4000-8000-0000000000aa', eventType: 'x', payload: {}, attempts: -1 } })).rejects.toThrow();
+    });
+
+    it('queued deliveries are private to the organization and can be queued inside a tenant transaction', async () => {
+      const made = await asTenant(orgA, (tx) => tx.webhookDelivery.create({ data: { organizationId: orgA, endpointId, eventId: '00000000-0000-4000-8000-0000000000bb', eventType: 'reservation.created', payload: { ok: true } }, select: { id: true } }));
+      expect(await asTenant(orgB, (tx) => tx.webhookDelivery.count({ where: { id: made.id } }))).toBe(0);
     });
   });
 

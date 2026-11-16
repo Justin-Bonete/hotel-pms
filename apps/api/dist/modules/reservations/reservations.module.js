@@ -10,12 +10,18 @@ exports.ReservationsModule = void 0;
 const common_1 = require("@nestjs/common");
 const folios_module_1 = require("../folios/folios.module");
 const housekeeping_module_1 = require("../housekeeping/housekeeping.module");
+const webhooks_module_1 = require("../webhooks/webhooks.module");
 const reservations_controller_1 = require("./reservations.controller");
 const reservations_service_1 = require("./reservations.service");
 let ReservationsModule = class ReservationsModule {
 };
 exports.ReservationsModule = ReservationsModule;
 exports.ReservationsModule = ReservationsModule = __decorate([
-    (0, common_1.Module)({ imports: [folios_module_1.FoliosModule, housekeeping_module_1.HousekeepingModule], controllers: [reservations_controller_1.ReservationsController], providers: [reservations_service_1.ReservationsService] })
+    (0, common_1.Module)({
+        imports: [folios_module_1.FoliosModule, housekeeping_module_1.HousekeepingModule, webhooks_module_1.WebhooksModule],
+        controllers: [reservations_controller_1.ReservationsController],
+        providers: [reservations_service_1.ReservationsService],
+        exports: [reservations_service_1.ReservationsService],
+    })
 ], ReservationsModule);
 //# sourceMappingURL=reservations.module.js.map

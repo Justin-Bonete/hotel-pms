@@ -224,3 +224,32 @@ How each number is defined (all money is whole centavos, worked out per property
 - **Comparison** is against the previous period of the same length. When there is nothing to compare with, it says so instead of showing an infinite or false 0% change.
 - **CSV exports** neutralise spreadsheet formulas in text cells and write money as plain numbers.
 - If a report ever reaches its safety row limit, the screen says the figures may be incomplete.
+
+## Integrations (Phase 7a)
+
+```bash
+# stop pnpm dev:api and pnpm dev:web first (Ctrl+C), or Prisma can't update its files on Windows
+pnpm install
+pnpm build:packages
+pnpm db:migrate     # name it: phase7a_integrations   (adds API keys, webhook endpoints, webhook deliveries; regenerates the Prisma client)
+pnpm db:rls
+pnpm test && pnpm test:int
+pnpm dev:api        # and pnpm dev:web in a second terminal
+```
+
+Optional `.env` settings (see `.env.example`): `MAIL_PROVIDER=resend` with `RESEND_API_KEY` and `MAIL_FROM` for real emails; `DATA_ENCRYPTION_KEY` (required in production; generate with `openssl rand -hex 32`).
+
+Open **Integrations** in the sidebar (owners and managers only).
+
+How it is protected:
+- **API keys** are random 256-bit values. Only a one-way hash is stored, the full key is shown once, and a key can reach only the properties chosen for it. Anyone who creates a key must already manage those properties, so a key never widens anyone's access. Wrong, revoked and expired keys all get the same answer, repeated wrong keys from one address are slowed down, and each key is rate limited.
+- **Online bookings** reuse the exact staff booking code (pricing, availability, the last-room lock). A booking request must carry an `Idempotency-Key`, so a retry can't double-book. Bookings are attributed to the API key in the audit log, not to a staff member. Booking lookups need both the code and the guest's email.
+- **Webhooks** are written in the same database transaction as the change that caused them, so they are never lost or sent for something that rolled back. A background worker delivers them (several servers can run it without sending twice), signs each one (HMAC-SHA256 with a timestamp), retries for about a day, then gives up, and turns an endpoint off after 10 given-up deliveries in a row. Signing secrets are stored encrypted.
+- **Server-side request forgery is blocked:** a webhook address that points at a private network, localhost or the cloud metadata address is refused, and the destination is checked again at the moment each connection is made, so a name that later changes to point inside is refused too. Redirects are not followed.
+
+Try the booking API from a terminal (replace the key and ids):
+```powershell
+curl.exe -H "X-API-Key: pmsk_live_..." "http://localhost:4000/api/v1/public/properties"
+curl.exe -H "X-API-Key: pmsk_live_..." "http://localhost:4000/api/v1/public/properties/<property-id>/availability?arrival=2026-12-01&departure=2026-12-03&adults=2"
+```
+To watch a webhook arrive during development, create one pointing at a free test address from a service such as webhook.site (https), press **Send test**, and open **Deliveries**.

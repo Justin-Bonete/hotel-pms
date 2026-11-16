@@ -24,6 +24,8 @@ const prisma_service_1 = require("../../database/prisma/prisma.service");
 const audit_service_1 = require("../audit/audit.service");
 const folio_ledger_service_1 = require("../folios/folio-ledger.service");
 const housekeeping_automation_service_1 = require("../housekeeping/housekeeping-automation.service");
+const webhooks_service_1 = require("../webhooks/webhooks.service");
+const webhook_events_1 = require("../webhooks/webhook-events");
 const realtime_service_1 = require("../realtime/realtime.service");
 const availability_1 = require("./availability");
 const reservation_mapper_1 = require("./reservation.mapper");
@@ -36,12 +38,14 @@ let ReservationsService = class ReservationsService {
     ledger;
     realtime;
     housekeeping;
-    constructor(prisma, audit, ledger, realtime, housekeeping) {
+    webhooks;
+    constructor(prisma, audit, ledger, realtime, housekeeping, webhooks) {
         this.prisma = prisma;
         this.audit = audit;
         this.ledger = ledger;
         this.realtime = realtime;
         this.housekeeping = housekeeping;
+        this.webhooks = webhooks;
     }
     // ================================================================ reads
     async list(query, access) {
@@ -167,7 +171,14 @@ let ReservationsService = class ReservationsService {
     // ================================================================ create
     async create(propertyId, dto, access) {
         (0, assert_access_1.assertCan)(access, 'reservation.manage', propertyId);
-        return this.prisma.forTenant(async (tx) => {
+        return this.createAs({ organizationId: access.organizationId, userId: access.userId }, propertyId, dto);
+    }
+    /**
+     * The one place a reservation is created. `actor.userId` is null (and `via` says which API key) when the booking comes
+     * from the public booking API, so the audit trail never blames a staff member for something they did not do.
+     */
+    async createAs(actor, propertyId, dto) {
+        return this.prisma.forOrganization(actor.organizationId, async (tx) => {
             const property = await this.requireProperty(tx, propertyId);
             const today = (0, types_1.todayIn)(property.timezone);
             if (dto.arrivalDate < today)
@@ -182,13 +193,13 @@ let ReservationsService = class ReservationsService {
                 throw (0, errors_1.badRequest)('OVER_CAPACITY', `${roomType.name} sleeps at most ${roomType.maxOccupancy} guests.`);
             }
             const { plan, quote } = await this.resolveQuote(tx, propertyId, roomType.id, roomType.name, dto.ratePlanId, dto.arrivalDate, dto.departureDate);
-            const guestId = await this.resolveGuest(tx, dto, access);
+            const guestId = await this.resolveGuest(tx, dto, actor);
             if (dto.status !== 'INQUIRY') {
                 await this.ensureAvailability(tx, { propertyId, roomTypeId: roomType.id, typeName: roomType.name, arrival: dto.arrivalDate, departure: dto.departureDate });
             }
             const row = await tx.reservation.create({
                 data: {
-                    organizationId: access.organizationId,
+                    organizationId: actor.organizationId,
                     propertyId,
                     code: await this.newCode(tx),
                     guestId,
@@ -206,21 +217,23 @@ let ReservationsService = class ReservationsService {
                     currency: property.currency,
                     specialRequests: (0, text_1.emptyToNull)(dto.specialRequests) ?? null,
                     notes: (0, text_1.emptyToNull)(dto.notes) ?? null,
-                    createdById: access.userId,
+                    createdById: actor.userId,
                 },
                 include: reservation_mapper_1.reservationInclude,
             });
             await this.audit.record(tx, {
-                organizationId: access.organizationId,
-                actorId: access.userId,
+                organizationId: actor.organizationId,
+                actorId: actor.userId,
                 propertyId,
                 action: 'reservation.created',
                 entity: 'reservation',
                 entityId: row.id,
-                after: { code: row.code, status: row.status, arrival: dto.arrivalDate, departure: dto.departureDate, roomType: roomType.name, totalMinor: quote.totalMinor },
+                after: { code: row.code, status: row.status, arrival: dto.arrivalDate, departure: dto.departureDate, roomType: roomType.name, totalMinor: quote.totalMinor, ...(actor.via ? { via: actor.via } : {}) },
             });
-            this.realtime.emit(access.organizationId, 'reservation.changed', propertyId, [row.id]);
-            return (0, reservation_mapper_1.toReservationView)(row);
+            this.realtime.emit(actor.organizationId, 'reservation.changed', propertyId, [row.id]);
+            const view = (0, reservation_mapper_1.toReservationView)(row);
+            await this.webhooks.enqueue(tx, { organizationId: actor.organizationId, propertyId, type: 'reservation.created', data: (0, webhook_events_1.reservationEventData)(view) });
+            return view;
         });
     }
     // ================================================================ update
@@ -464,7 +477,11 @@ let ReservationsService = class ReservationsService {
             if (dto.action === 'check_in' || dto.action === 'check_out')
                 this.realtime.emit(access.organizationId, 'folio.changed', r.propertyId, [id]);
             const fresh = await tx.reservation.findFirstOrThrow({ where: { id }, include: reservation_mapper_1.reservationInclude });
-            return (0, reservation_mapper_1.toReservationView)(fresh);
+            const view = (0, reservation_mapper_1.toReservationView)(fresh);
+            if (view.status !== r.status) {
+                await this.webhooks.enqueue(tx, { organizationId: access.organizationId, propertyId: r.propertyId, type: 'reservation.status_changed', data: { ...(0, webhook_events_1.reservationEventData)(view), previousStatus: r.status } });
+            }
+            return view;
         });
     }
     // ================================================================ internals
@@ -504,7 +521,7 @@ let ReservationsService = class ReservationsService {
             throw (0, errors_1.badRequest)('NO_RATE', `"${plan.name}" has no rate for ${typeName}. Add one in Rooms → Rates.`);
         return { plan, quote: (0, types_1.quoteStay)(arrival, departure, { nightlyRateMinor: rate.nightlyRateMinor, weekendRateMinor: rate.weekendRateMinor }) };
     }
-    async resolveGuest(tx, dto, access) {
+    async resolveGuest(tx, dto, actor) {
         if (dto.guestId) {
             const guest = await tx.guest.findFirst({ where: { id: dto.guestId, deletedAt: null }, select: { id: true } });
             if (!guest)
@@ -518,7 +535,7 @@ let ReservationsService = class ReservationsService {
         }
         const created = await tx.guest.create({
             data: {
-                organizationId: access.organizationId,
+                organizationId: actor.organizationId,
                 firstName: g.firstName,
                 lastName: g.lastName,
                 email,
@@ -530,7 +547,7 @@ let ReservationsService = class ReservationsService {
             },
             select: { id: true },
         });
-        await this.audit.record(tx, { organizationId: access.organizationId, actorId: access.userId, action: 'guest.created', entity: 'guest', entityId: created.id, after: { name: `${g.firstName} ${g.lastName}`, via: 'reservation' } });
+        await this.audit.record(tx, { organizationId: actor.organizationId, actorId: actor.userId, action: 'guest.created', entity: 'guest', entityId: created.id, after: { name: `${g.firstName} ${g.lastName}`, via: 'reservation' } });
         return created.id;
     }
     /**
@@ -608,6 +625,7 @@ exports.ReservationsService = ReservationsService = __decorate([
         audit_service_1.AuditService,
         folio_ledger_service_1.FolioLedger,
         realtime_service_1.RealtimeService,
-        housekeeping_automation_service_1.HousekeepingAutomation])
+        housekeeping_automation_service_1.HousekeepingAutomation,
+        webhooks_service_1.WebhooksService])
 ], ReservationsService);
 //# sourceMappingURL=reservations.service.js.map

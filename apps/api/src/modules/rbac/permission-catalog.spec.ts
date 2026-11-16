@@ -153,6 +153,14 @@ describe('system roles', () => {
     expect(role('ACCOUNTANT').permissions.filter((p) => p.startsWith('pos.'))).toEqual(['pos.read']);
   });
 
+  it('only managers can create API keys and webhooks; no operational role (including the accountant) can even see them', () => {
+    for (const r of SYSTEM_ROLE_TEMPLATES) {
+      const manager = ['OWNER', 'SUPER_ADMIN', 'GENERAL_MANAGER', 'PROPERTY_MANAGER'].includes(r.key);
+      expect(r.permissions.includes('integration.manage'), `${r.key} manage`).toBe(manager);
+      expect(r.permissions.includes('integration.read'), `${r.key} read`).toBe(manager);
+    }
+  });
+
   it('only managers and the accountant can see analytics; operational staff cannot', () => {
     for (const r of SYSTEM_ROLE_TEMPLATES) {
       expect(r.permissions.includes('analytics.read'), r.key).toBe(['OWNER', 'SUPER_ADMIN', 'GENERAL_MANAGER', 'PROPERTY_MANAGER', 'ACCOUNTANT'].includes(r.key));

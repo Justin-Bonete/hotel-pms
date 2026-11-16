@@ -21,16 +21,21 @@ const health_module_1 = require("./modules/health/health.module");
 const buildings_module_1 = require("./modules/buildings/buildings.module");
 const properties_module_1 = require("./modules/properties/properties.module");
 const property_groups_module_1 = require("./modules/property-groups/property-groups.module");
+const analytics_module_1 = require("./modules/analytics/analytics.module");
+const api_keys_module_1 = require("./modules/api-keys/api-keys.module");
+const crypto_service_1 = require("./common/crypto/crypto.service");
 const dashboard_module_1 = require("./modules/dashboard/dashboard.module");
 const expenses_module_1 = require("./modules/expenses/expenses.module");
 const folios_module_1 = require("./modules/folios/folios.module");
 const inventory_module_1 = require("./modules/inventory/inventory.module");
 const pos_module_1 = require("./modules/pos/pos.module");
+const public_api_module_1 = require("./modules/public-api/public-api.module");
 const purchasing_module_1 = require("./modules/purchasing/purchasing.module");
 const suppliers_module_1 = require("./modules/suppliers/suppliers.module");
 const frontdesk_module_1 = require("./modules/frontdesk/frontdesk.module");
 const housekeeping_module_1 = require("./modules/housekeeping/housekeeping.module");
 const maintenance_module_1 = require("./modules/maintenance/maintenance.module");
+const webhooks_module_1 = require("./modules/webhooks/webhooks.module");
 const realtime_module_1 = require("./modules/realtime/realtime.module");
 const staff_module_1 = require("./modules/staff/staff.module");
 const taxes_module_1 = require("./modules/taxes/taxes.module");
@@ -49,7 +54,8 @@ exports.AppModule = AppModule = __decorate([
             properties_module_1.PropertiesModule, property_groups_module_1.PropertyGroupsModule, buildings_module_1.BuildingsModule, room_types_module_1.RoomTypesModule, rooms_module_1.RoomsModule,
             guests_module_1.GuestsModule, rates_module_1.RatesModule, reservations_module_1.ReservationsModule, folios_module_1.FoliosModule, taxes_module_1.TaxesModule,
             realtime_module_1.RealtimeModule, staff_module_1.StaffModule, housekeeping_module_1.HousekeepingModule, maintenance_module_1.MaintenanceModule, frontdesk_module_1.FrontDeskModule,
-            suppliers_module_1.SuppliersModule, inventory_module_1.InventoryModule, purchasing_module_1.PurchasingModule, expenses_module_1.ExpensesModule, dashboard_module_1.DashboardModule, pos_module_1.PosModule],
+            suppliers_module_1.SuppliersModule, inventory_module_1.InventoryModule, purchasing_module_1.PurchasingModule, expenses_module_1.ExpensesModule, dashboard_module_1.DashboardModule, pos_module_1.PosModule, analytics_module_1.AnalyticsModule,
+            crypto_service_1.CryptoModule, webhooks_module_1.WebhooksModule, api_keys_module_1.ApiKeysModule, public_api_module_1.PublicApiModule],
         providers: [
             { provide: core_1.APP_FILTER, useClass: all_exceptions_filter_1.AllExceptionsFilter },
             // Order matters: context first (outermost), then the response envelope.
