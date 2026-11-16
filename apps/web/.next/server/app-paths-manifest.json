@@ -1,1 +1,10 @@
-{}
+{
+  "/(dashboard)/[module]/page": "app/(dashboard)/[module]/page.js",
+  "/(dashboard)/dashboard/page": "app/(dashboard)/dashboard/page.js",
+  "/(dashboard)/integrations/page": "app/(dashboard)/integrations/page.js",
+  "/(auth)/login/page": "app/(auth)/login/page.js",
+  "/(dashboard)/front-desk/page": "app/(dashboard)/front-desk/page.js",
+  "/(dashboard)/calendar/page": "app/(dashboard)/calendar/page.js",
+  "/(dashboard)/properties/page": "app/(dashboard)/properties/page.js",
+  "/(dashboard)/housekeeping/page": "app/(dashboard)/housekeeping/page.js"
+}
